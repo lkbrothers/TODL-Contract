@@ -591,7 +591,7 @@ contract Main is Ownable {
         ItemPartsNFT itemParts = ItemPartsNFT(managedContracts[uint8(Types.ContractTags.ItemParts)]);
         for(uint i = 0; i < _itemPartsIds.length; i++) {
             // ItemParts 소유자 체크
-            if(itemParts.ownerOf(i) != holder) {
+            if(itemParts.ownerOf(_itemPartsIds[i]) != holder) {
                 revert NotItemPartsOwner(holder, _itemPartsIds[i]);
             }
             // ItemParts 부위 적합성 체크

@@ -192,7 +192,7 @@ describe("Main Contract", function () {
 
         it("라운드를 시작할 수 있어야 한다", async function () {
             expect(await main.roundId()).to.equal(1);
-            expect(await main.getRoundStatus(1)).to.equal(0); // Proceeding
+            expect(await main.getRoundStatus(1)).to.equal(1); // Proceeding
         });
 
         it("admin이 아닌 계정은 라운드를 시작할 수 없어야 한다", async function () {
@@ -206,7 +206,7 @@ describe("Main Contract", function () {
         });
 
         it("라운드 상태를 조회할 수 있어야 한다", async function () {
-            expect(await main.getRoundStatus(1)).to.equal(0); // Proceeding
+            expect(await main.getRoundStatus(1)).to.equal(1); // Proceeding
         });
     });
 
@@ -220,37 +220,64 @@ describe("Main Contract", function () {
     describe("Agent 구매", function () {
         beforeEach(async function () {
             // 사용자에게 각 부위별 ItemParts 지급 (Head, Body, Legs, Rhand, Lhand)
-            const requiredParts = new Set(); // 필요한 부위들을 추적
+            const requiredParts = new Set(); // 필요한 부위들의 토큰 ID를 추적
             const maxAttempts = 50; // 최대 시도 횟수 (무한 루프 방지)
             let attempts = 0;
+            const mintedTokenIds = []; // 실제 민팅된 토큰 ID들을 추적
+            const tokenIdToPartsIndex = new Map(); // 토큰 ID -> partsIndex 매핑
+            const partsIndexToTokenId = new Map(); // partsIndex -> 토큰 ID 매핑 (각 부위별 첫 번째 토큰)
             
             while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const balanceBefore = await itemParts.balanceOf(user1.address)+1n; // 민팅 전 잔액
+                let totalSupply = await itemParts.totalSupply();
+                console.log(`before ItemParts totalSupply: ${totalSupply}`);
                 const tx = await itemParts.connect(user1).mint();
-                await tx.wait(); // 블록 확정 대기
+                const receipt = await tx.wait(); // 블록 확정 대기
+                totalSupply = await itemParts.totalSupply();
+                console.log(`after ItemParts totalSupply: ${totalSupply}`);
                 attempts++;
                 
-                // user1이 보유한 모든 ItemParts 확인
-                const balance = await itemParts.balanceOf(user1.address);
-                for (let i = 0; i < balance; i++) {
-                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                const balanceAfter = await itemParts.balanceOf(user1.address); // 민팅 후 잔액
+                
+                // 새로 민팅된 토큰들만 처리 (balanceBefore부터 balanceAfter-1까지)
+                for (let i = balanceBefore; i < balanceAfter; i++) {
+                    const tokenId = i; // 실제 토큰 ID
                     const tokenInfo = await itemParts.tokenInfo(tokenId);
-                    requiredParts.add(tokenInfo.partsIndex);
+                    const idx = Number(tokenInfo.partsIndex); // number로 변환
+                    tokenIdToPartsIndex.set(tokenId, idx);
+                    
+                    // 각 partsIndex별로 첫 번째 토큰 ID만 저장
+                    if (!partsIndexToTokenId.has(idx)) {
+                        partsIndexToTokenId.set(idx, tokenId);
+                        requiredParts.add(tokenId);
+                    }
                 }
             }
+            
+            console.log(`최종 requiredParts (토큰 IDs): ${Array.from(requiredParts)}`);
+            console.log(`민팅된 토큰 IDs: ${mintedTokenIds}`);
             
             // 각 부위별로 하나씩 있는지 확인
             expect(requiredParts.size).to.equal(5);
             
-            // Agent 구매에 필요한 토큰 ID들을 수집
-            const userTokens = [];
-            const balance = await itemParts.balanceOf(user1.address);
-            for (let i = 0; i < balance; i++) {
-                const tokenId = i; // 순차적으로 증가하는 토큰 ID
-                userTokens.push(tokenId);
+            // partsIndex 순서대로 정렬된 토큰 ID들 선택 (0:Head, 1:Body, 2:Legs, 3:Rhand, 4:Lhand)
+            const sortedTokenIds = [];
+            const partsOrder = [0, 1, 2, 3, 4]; // partsIndex 순서
+            
+            console.log(`partsIndexToTokenId 매핑:`, Object.fromEntries(partsIndexToTokenId));
+            
+            for (const partsIndex of partsOrder) {
+                const tokenId = partsIndexToTokenId.get(partsIndex); // number key로 조회
+                console.log(`partsIndex ${partsIndex} -> tokenId ${tokenId}`);
+                if (tokenId !== undefined) {
+                    sortedTokenIds.push(tokenId);
+                }
             }
             
+            console.log(`정렬된 토큰 IDs (partsIndex 순서): ${sortedTokenIds}`);
+            
             // 테스트에서 사용할 토큰 ID들을 저장
-            this.userTokens = userTokens;
+            this.userTokens = sortedTokenIds;
         });
 
         it("Agent를 구매할 수 있어야 한다", async function () {
@@ -306,6 +333,7 @@ describe("Main Contract", function () {
             console.log('Before buyAgent - Round ID:', beforeBuyRoundId);
             console.log('Before buyAgent - Round Status:', beforeBuyRoundStatus);
             
+            console.log('>>>>>>>>>>>>>>', itemPartsIds, deadline, signature)
             await main.connect(user1).buyAgent(itemPartsIds, deadline, signature);
             console.log('333')
             
@@ -362,33 +390,50 @@ describe("Main Contract", function () {
             await startRoundWithSignature(main, rng, admin);
             
             // 사용자에게 각 부위별 ItemParts 지급
-            const requiredParts = new Set();
+            const requiredParts = new Set(); // 필요한 부위들의 토큰 ID를 추적
             const maxAttempts = 50;
             let attempts = 0;
+            const mintedTokenIds = [];
+            const tokenIdToPartsIndex = new Map();
+            const partsIndexToTokenId = new Map(); // partsIndex -> 토큰 ID 매핑 (각 부위별 첫 번째 토큰)
             
             while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const balanceBefore = await itemParts.balanceOf(user1.address); // 민팅 전 잔액
                 const tx = await itemParts.connect(user1).mint();
-                await tx.wait(); // 블록 확정 대기
+                const receipt = await tx.wait(); // 블록 확정 대기
                 attempts++;
                 
-                const balance = await itemParts.balanceOf(user1.address);
-                for (let i = 0; i < balance; i++) {
-                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                const balanceAfter = await itemParts.balanceOf(user1.address); // 민팅 후 잔액
+                
+                // 새로 민팅된 토큰들만 처리 (balanceBefore부터 balanceAfter-1까지)
+                for (let i = balanceBefore; i < balanceAfter; i++) {
+                    const tokenId = i; // 실제 토큰 ID
                     const tokenInfo = await itemParts.tokenInfo(tokenId);
-                    requiredParts.add(tokenInfo.partsIndex);
+                    const idx = Number(tokenInfo.partsIndex); // number로 변환
+                    tokenIdToPartsIndex.set(tokenId, idx);
+                    
+                    // 각 partsIndex별로 첫 번째 토큰 ID만 저장
+                    if (!partsIndexToTokenId.has(idx)) {
+                        partsIndexToTokenId.set(idx, tokenId);
+                        requiredParts.add(tokenId);
+                    }
                 }
             }
             
             expect(requiredParts.size).to.equal(5);
             
-            const userTokens = [];
-            const balance = await itemParts.balanceOf(user1.address);
-            for (let i = 0; i < balance; i++) {
-                const tokenId = i; // 순차적으로 증가하는 토큰 ID
-                userTokens.push(tokenId);
+            // partsIndex 순서대로 정렬된 토큰 ID들 선택 (0:Head, 1:Body, 2:Legs, 3:Rhand, 4:Lhand)
+            const sortedTokenIds = [];
+            const partsOrder = [0, 1, 2, 3, 4]; // partsIndex 순서
+            
+            for (const partsIndex of partsOrder) {
+                const tokenId = partsIndexToTokenId.get(partsIndex);
+                if (tokenId !== undefined) {
+                    sortedTokenIds.push(tokenId);
+                }
             }
             
-            const itemPartsIds = userTokens.slice(0, 5);
+            const itemPartsIds = sortedTokenIds;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
@@ -454,33 +499,50 @@ describe("Main Contract", function () {
             await startRoundWithSignature(main, rng, admin);
             
             // Agent 구매 및 세일 종료
-            const requiredParts = new Set();
+            const requiredParts = new Set(); // 필요한 부위들의 토큰 ID를 추적
             const maxAttempts = 50;
             let attempts = 0;
+            const mintedTokenIds = [];
+            const tokenIdToPartsIndex = new Map();
+            const partsIndexToTokenId = new Map(); // partsIndex -> 토큰 ID 매핑 (각 부위별 첫 번째 토큰)
             
             while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const balanceBefore = await itemParts.balanceOf(user1.address); // 민팅 전 잔액
                 const tx = await itemParts.connect(user1).mint();
-                await tx.wait(); // 블록 확정 대기
+                const receipt = await tx.wait(); // 블록 확정 대기
                 attempts++;
                 
-                const balance = await itemParts.balanceOf(user1.address);
-                for (let i = 0; i < balance; i++) {
-                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                const balanceAfter = await itemParts.balanceOf(user1.address); // 민팅 후 잔액
+                
+                // 새로 민팅된 토큰들만 처리 (balanceBefore부터 balanceAfter-1까지)
+                for (let i = balanceBefore; i < balanceAfter; i++) {
+                    const tokenId = i; // 실제 토큰 ID
                     const tokenInfo = await itemParts.tokenInfo(tokenId);
-                    requiredParts.add(tokenInfo.partsIndex);
+                    const idx = Number(tokenInfo.partsIndex); // number로 변환
+                    tokenIdToPartsIndex.set(tokenId, idx);
+                    
+                    // 각 partsIndex별로 첫 번째 토큰 ID만 저장
+                    if (!partsIndexToTokenId.has(idx)) {
+                        partsIndexToTokenId.set(idx, tokenId);
+                        requiredParts.add(tokenId);
+                    }
                 }
             }
             
             expect(requiredParts.size).to.equal(5);
             
-            const userTokens = [];
-            const balance = await itemParts.balanceOf(user1.address);
-            for (let i = 0; i < balance; i++) {
-                const tokenId = i; // 순차적으로 증가하는 토큰 ID
-                userTokens.push(tokenId);
+            // partsIndex 순서대로 정렬된 토큰 ID들 선택 (0:Head, 1:Body, 2:Legs, 3:Rhand, 4:Lhand)
+            const sortedTokenIds = [];
+            const partsOrder = [0, 1, 2, 3, 4]; // partsIndex 순서
+            
+            for (const partsIndex of partsOrder) {
+                const tokenId = partsIndexToTokenId.get(partsIndex);
+                if (tokenId !== undefined) {
+                    sortedTokenIds.push(tokenId);
+                }
             }
             
-            const itemPartsIds = userTokens.slice(0, 5);
+            const itemPartsIds = sortedTokenIds;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
@@ -541,33 +603,50 @@ describe("Main Contract", function () {
             await startRoundWithSignature(main, rng, admin);
             
             // Agent 구매 및 정산
-            const requiredParts = new Set();
+            const requiredParts = new Set(); // 필요한 부위들의 토큰 ID를 추적
             const maxAttempts = 50;
             let attempts = 0;
+            const mintedTokenIds = [];
+            const tokenIdToPartsIndex = new Map();
+            const partsIndexToTokenId = new Map(); // partsIndex -> 토큰 ID 매핑 (각 부위별 첫 번째 토큰)
             
             while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const balanceBefore = await itemParts.balanceOf(user1.address); // 민팅 전 잔액
                 const tx = await itemParts.connect(user1).mint();
-                await tx.wait(); // 블록 확정 대기
+                const receipt = await tx.wait(); // 블록 확정 대기
                 attempts++;
                 
-                const balance = await itemParts.balanceOf(user1.address);
-                for (let i = 0; i < balance; i++) {
-                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                const balanceAfter = await itemParts.balanceOf(user1.address); // 민팅 후 잔액
+                
+                // 새로 민팅된 토큰들만 처리 (balanceBefore부터 balanceAfter-1까지)
+                for (let i = balanceBefore; i < balanceAfter; i++) {
+                    const tokenId = i; // 실제 토큰 ID
                     const tokenInfo = await itemParts.tokenInfo(tokenId);
-                    requiredParts.add(tokenInfo.partsIndex);
+                    const idx = Number(tokenInfo.partsIndex); // number로 변환
+                    tokenIdToPartsIndex.set(tokenId, idx);
+                    
+                    // 각 partsIndex별로 첫 번째 토큰 ID만 저장
+                    if (!partsIndexToTokenId.has(idx)) {
+                        partsIndexToTokenId.set(idx, tokenId);
+                        requiredParts.add(tokenId);
+                    }
                 }
             }
             
             expect(requiredParts.size).to.equal(5);
             
-            const userTokens = [];
-            const balance = await itemParts.balanceOf(user1.address);
-            for (let i = 0; i < balance; i++) {
-                const tokenId = i; // 순차적으로 증가하는 토큰 ID
-                userTokens.push(tokenId);
+            // partsIndex 순서대로 정렬된 토큰 ID들 선택 (0:Head, 1:Body, 2:Legs, 3:Rhand, 4:Lhand)
+            const sortedTokenIds = [];
+            const partsOrder = [0, 1, 2, 3, 4]; // partsIndex 순서
+            
+            for (const partsIndex of partsOrder) {
+                const tokenId = partsIndexToTokenId.get(partsIndex);
+                if (tokenId !== undefined) {
+                    sortedTokenIds.push(tokenId);
+                }
             }
             
-            const itemPartsIds = userTokens.slice(0, 5);
+            const itemPartsIds = sortedTokenIds;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
@@ -624,33 +703,50 @@ describe("Main Contract", function () {
 
         it("당첨 Agent가 아니면 당첨금을 수령할 수 없어야 한다", async function () {
             // 다른 Agent를 생성
-            const requiredParts2 = new Set();
+            const requiredParts2 = new Set(); // 필요한 부위들의 토큰 ID를 추적
             const maxAttempts2 = 50;
             let attempts2 = 0;
+            const mintedTokenIds2 = [];
+            const tokenIdToPartsIndex2 = new Map();
+            const partsIndexToTokenId2 = new Map(); // partsIndex -> 토큰 ID 매핑 (각 부위별 첫 번째 토큰)
             
             while (requiredParts2.size < 5 && attempts2 < maxAttempts2) {
+                const balanceBefore2 = await itemParts.balanceOf(user2.address); // 민팅 전 잔액
                 const tx = await itemParts.connect(user2).mint();
-                await tx.wait(); // 블록 확정 대기
+                const receipt = await tx.wait(); // 블록 확정 대기
                 attempts2++;
                 
-                const balance2 = await itemParts.balanceOf(user2.address);
-                for (let i = 0; i < balance2; i++) {
-                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                const balanceAfter2 = await itemParts.balanceOf(user2.address); // 민팅 후 잔액
+                
+                // 새로 민팅된 토큰들만 처리 (balanceBefore2부터 balanceAfter2-1까지)
+                for (let i = balanceBefore2; i < balanceAfter2; i++) {
+                    const tokenId = i; // 실제 토큰 ID
                     const tokenInfo = await itemParts.tokenInfo(tokenId);
-                    requiredParts2.add(tokenInfo.partsIndex);
+                    const idx = Number(tokenInfo.partsIndex); // number로 변환
+                    tokenIdToPartsIndex2.set(tokenId, idx);
+                    
+                    // 각 partsIndex별로 첫 번째 토큰 ID만 저장
+                    if (!partsIndexToTokenId2.has(idx)) {
+                        partsIndexToTokenId2.set(idx, tokenId);
+                        requiredParts2.add(tokenId);
+                    }
                 }
             }
             
             expect(requiredParts2.size).to.equal(5);
             
-            const user2Tokens = [];
-            const balance2 = await itemParts.balanceOf(user2.address);
-            for (let i = 0; i < balance2; i++) {
-                const tokenId = i; // 순차적으로 증가하는 토큰 ID
-                user2Tokens.push(tokenId);
+            // partsIndex 순서대로 정렬된 토큰 ID들 선택 (0:Head, 1:Body, 2:Legs, 3:Rhand, 4:Lhand)
+            const sortedTokenIds2 = [];
+            const partsOrder = [0, 1, 2, 3, 4]; // partsIndex 순서
+            
+            for (const partsIndex of partsOrder) {
+                const tokenId = partsIndexToTokenId2.get(partsIndex);
+                if (tokenId !== undefined) {
+                    sortedTokenIds2.push(tokenId);
+                }
             }
             
-            const itemPartsIds = user2Tokens.slice(0, 5);
+            const itemPartsIds = sortedTokenIds2;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user2.signTypedData(
                 {
@@ -701,33 +797,50 @@ describe("Main Contract", function () {
             await startRoundWithSignature(main, rng, admin);
             
             // Agent 구매
-            const requiredParts = new Set();
+            const requiredParts = new Set(); // 필요한 부위들의 토큰 ID를 추적
             const maxAttempts = 50;
             let attempts = 0;
+            const mintedTokenIds = [];
+            const tokenIdToPartsIndex = new Map();
+            const partsIndexToTokenId = new Map(); // partsIndex -> 토큰 ID 매핑 (각 부위별 첫 번째 토큰)
             
             while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const balanceBefore = await itemParts.balanceOf(user1.address); // 민팅 전 잔액
                 const tx = await itemParts.connect(user1).mint();
-                await tx.wait(); // 블록 확정 대기
+                const receipt = await tx.wait(); // 블록 확정 대기
                 attempts++;
                 
-                const balance = await itemParts.balanceOf(user1.address);
-                for (let i = 0; i < balance; i++) {
-                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                const balanceAfter = await itemParts.balanceOf(user1.address); // 민팅 후 잔액
+                
+                // 새로 민팅된 토큰들만 처리 (balanceBefore부터 balanceAfter-1까지)
+                for (let i = balanceBefore; i < balanceAfter; i++) {
+                    const tokenId = i; // 실제 토큰 ID
                     const tokenInfo = await itemParts.tokenInfo(tokenId);
-                    requiredParts.add(tokenInfo.partsIndex);
+                    const idx = Number(tokenInfo.partsIndex); // number로 변환
+                    tokenIdToPartsIndex.set(tokenId, idx);
+                    
+                    // 각 partsIndex별로 첫 번째 토큰 ID만 저장
+                    if (!partsIndexToTokenId.has(idx)) {
+                        partsIndexToTokenId.set(idx, tokenId);
+                        requiredParts.add(tokenId);
+                    }
                 }
             }
             
             expect(requiredParts.size).to.equal(5);
             
-            const userTokens = [];
-            const balance = await itemParts.balanceOf(user1.address);
-            for (let i = 0; i < balance; i++) {
-                const tokenId = i; // 순차적으로 증가하는 토큰 ID
-                userTokens.push(tokenId);
+            // partsIndex 순서대로 정렬된 토큰 ID들 선택 (0:Head, 1:Body, 2:Legs, 3:Rhand, 4:Lhand)
+            const sortedTokenIds = [];
+            const partsOrder = [0, 1, 2, 3, 4]; // partsIndex 순서
+            
+            for (const partsIndex of partsOrder) {
+                const tokenId = partsIndexToTokenId.get(partsIndex);
+                if (tokenId !== undefined) {
+                    sortedTokenIds.push(tokenId);
+                }
             }
             
-            const itemPartsIds = userTokens.slice(0, 5);
+            const itemPartsIds = sortedTokenIds;
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
