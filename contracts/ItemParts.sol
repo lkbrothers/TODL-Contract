@@ -39,16 +39,19 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     event MaxMintPerDayUpdated(uint256 maxMintPerDay);
     /**
      * @notice parts 변경 이벤트
+     * @dev 부위를 다시 정의한다.
      * @param arrayLength 변경된 배열의 총 길이
      */
     event PartsUpdated(uint256 arrayLength);
     /**
      * @notice origins 변경 이벤트
+     * @dev origins를 다시 정의한다.
      * @param arrayLength 변경된 배열의 총 길이
      */
     event OriginsUpdated(uint256 arrayLength);
     /**
      * @notice setNums 변경 이벤트
+     * @dev setNums를 다시 정의한다.
      * @param arrayLength 변경된 배열의 총 길이
      */
     event SetnumsUpdated(uint256 arrayLength);

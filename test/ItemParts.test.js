@@ -121,7 +121,7 @@ describe("ItemParts Contract", function () {
             const baseURI = "https://api.todl.com/metadata/";
             await expect(
                 itemParts.connect(user1).setBaseURI(baseURI)
-            ).to.be.revertedWith("Ownable: caller is not the owner");
+            ).to.be.revertedWithCustomError(itemParts, "OwnableUnauthorizedAccount");
         });
 
         it("토큰 URI가 올바르게 반환되어야 한다", async function () {

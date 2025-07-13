@@ -21,6 +21,8 @@ contract AgentNFT is ERC721URIStorage, Ownable {
     event BaseUriUpdated(bytes32 newHash);
     /**
      * @notice 민팅 이벤트
+     * @dev 부위 오더링은 아래 지라링크 참조
+     * https://lkbrothers.atlassian.net/browse/SGD-169
      * @param tokenId 민팅된 토큰 ID
      * @param headId Head 부위 itemParts NFT
      * @param bodyId Body 부위 itemParts NFT

@@ -119,6 +119,7 @@ contract Main is Ownable {
     event RoundStarted(uint256 indexed roundId);
     /**
      * @notice 라운드 "게임참여 종료" 이벤트
+     * @dev 상기 이벤트 발생 이후부터는 해당 라운드에 대해 게임참여가 불가능하다.
      * @param roundId "게임참여 종료"된 라운드 ID
      * @param msgSender 라운드를 "게임참여 종료"한 주소
      */
@@ -273,13 +274,13 @@ contract Main is Ownable {
      * @param _signature 데이터 서명
      */
     function startRound(bytes calldata _signature) external onlyAdmin {
-        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         if(roundId > 0) {
-            if(uint8(roundStatusInfo.status) < uint8(Types.RoundStatus.Claiming)) {
-                revert LastRoundNotEnded(roundId, uint8(roundStatusInfo.status));
+            if(uint8(roundStatusManageInfo[roundId].status) < uint8(Types.RoundStatus.Claiming)) {
+                revert LastRoundNotEnded(roundId, uint8(roundStatusManageInfo[roundId].status));
             }
         }
         ++roundId; // new round!
+        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         (bool success, ) = managedContracts[uint8(Types.ContractTags.Rng)].call(
             abi.encodeWithSelector(
                 bytes4(keccak256("commit(uint256,bytes)")),

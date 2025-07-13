@@ -1,6 +1,32 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+// 헬퍼 함수들
+async function startRoundWithSignature(main, rng, admin, roundId = 1, randSeed = 5) {
+    const rngDomain = {
+        name: 'Custom-Rng',
+        version: '1',
+        chainId: await ethers.provider.getNetwork().then(n => n.chainId),
+        verifyingContract: await rng.getAddress()
+    };
+    
+    const rngTypes = {
+        SigData: [
+            { name: 'roundId', type: 'uint256' },
+            { name: 'randSeed', type: 'uint256' }
+        ]
+    };
+    
+    const rngMessage = {
+        roundId: roundId,
+        randSeed: randSeed
+    };
+    
+    const rngSignature = await admin.signTypedData(rngDomain, rngTypes, rngMessage);
+    const tx = await main.connect(admin).startRound(rngSignature);
+    await tx.wait(); // 블록 확정 대기
+}
+
 describe("Main Contract", function () {
     let main, itemParts, agent, rng, rewardPool, stakePool, reserv, sttToken;
     let owner, admin, carrier, donateAddr, corporateAddr, operationAddr, user1, user2, user3;
@@ -56,9 +82,9 @@ describe("Main Contract", function () {
         await main.setContracts(managedContracts);
 
         // 사용자들에게 STT 토큰 지급
-        // await sttToken.mint(user1.address, ethers.parseEther("1000"));
-        // await sttToken.mint(user2.address, ethers.parseEther("1000"));
-        // await sttToken.mint(user3.address, ethers.parseEther("1000"));
+        await sttToken.transfer(user1.address, ethers.parseEther("1000"));
+        await sttToken.transfer(user2.address, ethers.parseEther("1000"));
+        await sttToken.transfer(user3.address, ethers.parseEther("1000"));
     });
 
     describe("초기화", function () {
@@ -107,7 +133,7 @@ describe("Main Contract", function () {
 
         it("owner가 아닌 계정은 주소를 설정할 수 없어야 한다", async function () {
             await expect(main.connect(user1).setAdminAddress(user2.address, true))
-                .to.be.revertedWith("Ownable: caller is not the owner");
+                .to.be.revertedWithCustomError(main, "OwnableUnauthorizedAccount");
         });
     });
 
@@ -150,18 +176,18 @@ describe("Main Contract", function () {
 
         it("owner가 아닌 계정은 주소를 설정할 수 없어야 한다", async function () {
             await expect(main.connect(user1).setDonateAddress(user2.address))
-                .to.be.revertedWith("Ownable: caller is not the owner");
+                .to.be.revertedWithCustomError(main, "OwnableUnauthorizedAccount");
             await expect(main.connect(user1).setCorporateAddress(user2.address))
-                .to.be.revertedWith("Ownable: caller is not the owner");
+                .to.be.revertedWithCustomError(main, "OwnableUnauthorizedAccount");
             await expect(main.connect(user1).setOperationAddress(user2.address))
-                .to.be.revertedWith("Ownable: caller is not the owner");
+                .to.be.revertedWithCustomError(main, "OwnableUnauthorizedAccount");
         });
     });
 
     describe("라운드 관리", function () {
         beforeEach(async function () {
             // 라운드 시작을 위한 기본 설정
-            await main.connect(admin).startRound("0x");
+            await startRoundWithSignature(main, rng, admin);
         });
 
         it("라운드를 시작할 수 있어야 한다", async function () {
@@ -193,20 +219,57 @@ describe("Main Contract", function () {
 
     describe("Agent 구매", function () {
         beforeEach(async function () {
-            // 라운드 시작
-            await main.connect(admin).startRound("0x");
+            // 사용자에게 각 부위별 ItemParts 지급 (Head, Body, Legs, Rhand, Lhand)
+            const requiredParts = new Set(); // 필요한 부위들을 추적
+            const maxAttempts = 50; // 최대 시도 횟수 (무한 루프 방지)
+            let attempts = 0;
             
-            // 사용자에게 ItemParts 지급
-            await itemParts.mint(user1.address, 0, 0, 0, 0);
-            await itemParts.mint(user1.address, 1, 0, 0, 0);
-            await itemParts.mint(user1.address, 2, 0, 0, 0);
-            await itemParts.mint(user1.address, 3, 0, 0, 0);
-            await itemParts.mint(user1.address, 4, 0, 0, 0);
+            while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const tx = await itemParts.connect(user1).mint();
+                await tx.wait(); // 블록 확정 대기
+                attempts++;
+                
+                // user1이 보유한 모든 ItemParts 확인
+                const balance = await itemParts.balanceOf(user1.address);
+                for (let i = 0; i < balance; i++) {
+                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                    const tokenInfo = await itemParts.tokenInfo(tokenId);
+                    requiredParts.add(tokenInfo.partsIndex);
+                }
+            }
+            
+            // 각 부위별로 하나씩 있는지 확인
+            expect(requiredParts.size).to.equal(5);
+            
+            // Agent 구매에 필요한 토큰 ID들을 수집
+            const userTokens = [];
+            const balance = await itemParts.balanceOf(user1.address);
+            for (let i = 0; i < balance; i++) {
+                const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                userTokens.push(tokenId);
+            }
+            
+            // 테스트에서 사용할 토큰 ID들을 저장
+            this.userTokens = userTokens;
         });
 
         it("Agent를 구매할 수 있어야 한다", async function () {
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            // 라운드를 진행중 상태로 변경
+            await startRoundWithSignature(main, rng, admin);
+            
+            // startRound 후 상태 확인
+            const afterStartRoundId = await main.roundId();
+            const afterStartRoundStatus = await main.getRoundStatus(afterStartRoundId);
+            console.log('After startRound - Round ID:', afterStartRoundId, 'Status:', afterStartRoundStatus);
+            
+            // 라운드 1의 상태도 확인
+            const round1Status = await main.getRoundStatus(1);
+            console.log('Round 1 Status:', round1Status);
+            
+            const itemPartsIds = this.userTokens.slice(0, 5); // 처음 5개 토큰 사용
+            console.log('ItemParts IDs:', itemPartsIds);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
+            console.log('111')
             
             // Permit 서명 생성
             const domain = {
@@ -235,18 +298,27 @@ describe("Main Contract", function () {
             };
             
             const signature = await user1.signTypedData(domain, types, message);
+            console.log('222')
+            
+            // 라운드 상태 확인
+            const beforeBuyRoundId = await main.roundId();
+            const beforeBuyRoundStatus = await main.getRoundStatus(beforeBuyRoundId);
+            console.log('Before buyAgent - Round ID:', beforeBuyRoundId);
+            console.log('Before buyAgent - Round Status:', beforeBuyRoundStatus);
             
             await main.connect(user1).buyAgent(itemPartsIds, deadline, signature);
+            console.log('333')
             
             // Agent가 민팅되었는지 확인
             expect(await agent.balanceOf(user1.address)).to.equal(1);
+            console.log('444')
         });
 
         it("라운드가 진행중이 아니면 Agent를 구매할 수 없어야 한다", async function () {
             // 라운드를 종료 상태로 변경
             await main.connect(admin).endRound(1);
             
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            const itemPartsIds = this.userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = "0x";
             
@@ -258,7 +330,7 @@ describe("Main Contract", function () {
             // 사용자의 STT 잔액을 0으로 만듦
             await sttToken.connect(user1).transfer(ethers.ZeroAddress, await sttToken.balanceOf(user1.address));
             
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            const itemPartsIds = this.userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = "0x";
             
@@ -267,7 +339,7 @@ describe("Main Contract", function () {
         });
 
         it("올바르지 않은 ItemParts로 Agent를 구매할 수 없어야 한다", async function () {
-            const itemPartsIds = [0, 1, 2, 3, 5]; // 잘못된 부위
+            const itemPartsIds = [...this.userTokens.slice(0, 4), 999]; // 잘못된 토큰 ID 포함
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = "0x";
             
@@ -276,7 +348,7 @@ describe("Main Contract", function () {
         });
 
         it("소유하지 않은 ItemParts로 Agent를 구매할 수 없어야 한다", async function () {
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            const itemPartsIds = this.userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = "0x";
             
@@ -287,16 +359,36 @@ describe("Main Contract", function () {
 
     describe("라운드 세일 종료", function () {
         beforeEach(async function () {
-            await main.connect(admin).startRound("0x");
+            await startRoundWithSignature(main, rng, admin);
             
-            // 사용자에게 Agent 지급
-            await itemParts.mint(user1.address, 0, 0, 0, 0);
-            await itemParts.mint(user1.address, 1, 0, 0, 0);
-            await itemParts.mint(user1.address, 2, 0, 0, 0);
-            await itemParts.mint(user1.address, 3, 0, 0, 0);
-            await itemParts.mint(user1.address, 4, 0, 0, 0);
+            // 사용자에게 각 부위별 ItemParts 지급
+            const requiredParts = new Set();
+            const maxAttempts = 50;
+            let attempts = 0;
             
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const tx = await itemParts.connect(user1).mint();
+                await tx.wait(); // 블록 확정 대기
+                attempts++;
+                
+                const balance = await itemParts.balanceOf(user1.address);
+                for (let i = 0; i < balance; i++) {
+                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                    const tokenInfo = await itemParts.tokenInfo(tokenId);
+                    requiredParts.add(tokenInfo.partsIndex);
+                }
+            }
+            
+            expect(requiredParts.size).to.equal(5);
+            
+            const userTokens = [];
+            const balance = await itemParts.balanceOf(user1.address);
+            for (let i = 0; i < balance; i++) {
+                const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                userTokens.push(tokenId);
+            }
+            
+            const itemPartsIds = userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
@@ -359,16 +451,36 @@ describe("Main Contract", function () {
 
     describe("라운드 정산", function () {
         beforeEach(async function () {
-            await main.connect(admin).startRound("0x");
+            await startRoundWithSignature(main, rng, admin);
             
             // Agent 구매 및 세일 종료
-            await itemParts.mint(user1.address, 0, 0, 0, 0);
-            await itemParts.mint(user1.address, 1, 0, 0, 0);
-            await itemParts.mint(user1.address, 2, 0, 0, 0);
-            await itemParts.mint(user1.address, 3, 0, 0, 0);
-            await itemParts.mint(user1.address, 4, 0, 0, 0);
+            const requiredParts = new Set();
+            const maxAttempts = 50;
+            let attempts = 0;
             
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const tx = await itemParts.connect(user1).mint();
+                await tx.wait(); // 블록 확정 대기
+                attempts++;
+                
+                const balance = await itemParts.balanceOf(user1.address);
+                for (let i = 0; i < balance; i++) {
+                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                    const tokenInfo = await itemParts.tokenInfo(tokenId);
+                    requiredParts.add(tokenInfo.partsIndex);
+                }
+            }
+            
+            expect(requiredParts.size).to.equal(5);
+            
+            const userTokens = [];
+            const balance = await itemParts.balanceOf(user1.address);
+            for (let i = 0; i < balance; i++) {
+                const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                userTokens.push(tokenId);
+            }
+            
+            const itemPartsIds = userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
@@ -406,7 +518,7 @@ describe("Main Contract", function () {
             await ethers.provider.send("evm_increaseTime", [86400]);
             await ethers.provider.send("evm_mine");
             
-            await main.connect(admin).settleRound(12345);
+            await main.connect(admin).settleRound(5);
             expect(await main.getRoundStatus(1)).to.equal(2); // Claiming
         });
 
@@ -414,28 +526,48 @@ describe("Main Contract", function () {
             await ethers.provider.send("evm_increaseTime", [86400]);
             await ethers.provider.send("evm_mine");
             
-            await expect(main.connect(user1).settleRound(12345))
+            await expect(main.connect(user1).settleRound(5))
                 .to.be.revertedWithCustomError(main, "NotAdmin");
         });
 
         it("라운드가 Drawing 상태가 아니면 정산할 수 없어야 한다", async function () {
-            await expect(main.connect(admin).settleRound(12345))
+            await expect(main.connect(admin).settleRound(5))
                 .to.be.revertedWith("Round is not drawing");
         });
     });
 
     describe("당첨금 수령", function () {
         beforeEach(async function () {
-            await main.connect(admin).startRound("0x");
+            await startRoundWithSignature(main, rng, admin);
             
             // Agent 구매 및 정산
-            await itemParts.mint(user1.address, 0, 0, 0, 0);
-            await itemParts.mint(user1.address, 1, 0, 0, 0);
-            await itemParts.mint(user1.address, 2, 0, 0, 0);
-            await itemParts.mint(user1.address, 3, 0, 0, 0);
-            await itemParts.mint(user1.address, 4, 0, 0, 0);
+            const requiredParts = new Set();
+            const maxAttempts = 50;
+            let attempts = 0;
             
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const tx = await itemParts.connect(user1).mint();
+                await tx.wait(); // 블록 확정 대기
+                attempts++;
+                
+                const balance = await itemParts.balanceOf(user1.address);
+                for (let i = 0; i < balance; i++) {
+                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                    const tokenInfo = await itemParts.tokenInfo(tokenId);
+                    requiredParts.add(tokenInfo.partsIndex);
+                }
+            }
+            
+            expect(requiredParts.size).to.equal(5);
+            
+            const userTokens = [];
+            const balance = await itemParts.balanceOf(user1.address);
+            for (let i = 0; i < balance; i++) {
+                const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                userTokens.push(tokenId);
+            }
+            
+            const itemPartsIds = userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {
@@ -470,7 +602,7 @@ describe("Main Contract", function () {
             
             await ethers.provider.send("evm_increaseTime", [86400]);
             await ethers.provider.send("evm_mine");
-            await main.connect(admin).settleRound(12345);
+            await main.connect(admin).settleRound(5);
         });
 
         it("당첨 Agent 소유자가 당첨금을 수령할 수 있어야 한다", async function () {
@@ -492,13 +624,33 @@ describe("Main Contract", function () {
 
         it("당첨 Agent가 아니면 당첨금을 수령할 수 없어야 한다", async function () {
             // 다른 Agent를 생성
-            await itemParts.mint(user2.address, 0, 1, 0, 0);
-            await itemParts.mint(user2.address, 1, 1, 0, 0);
-            await itemParts.mint(user2.address, 2, 1, 0, 0);
-            await itemParts.mint(user2.address, 3, 1, 0, 0);
-            await itemParts.mint(user2.address, 4, 1, 0, 0);
+            const requiredParts2 = new Set();
+            const maxAttempts2 = 50;
+            let attempts2 = 0;
             
-            const itemPartsIds = [5, 6, 7, 8, 9];
+            while (requiredParts2.size < 5 && attempts2 < maxAttempts2) {
+                const tx = await itemParts.connect(user2).mint();
+                await tx.wait(); // 블록 확정 대기
+                attempts2++;
+                
+                const balance2 = await itemParts.balanceOf(user2.address);
+                for (let i = 0; i < balance2; i++) {
+                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                    const tokenInfo = await itemParts.tokenInfo(tokenId);
+                    requiredParts2.add(tokenInfo.partsIndex);
+                }
+            }
+            
+            expect(requiredParts2.size).to.equal(5);
+            
+            const user2Tokens = [];
+            const balance2 = await itemParts.balanceOf(user2.address);
+            for (let i = 0; i < balance2; i++) {
+                const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                user2Tokens.push(tokenId);
+            }
+            
+            const itemPartsIds = user2Tokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user2.signTypedData(
                 {
@@ -546,16 +698,36 @@ describe("Main Contract", function () {
 
     describe("환불", function () {
         beforeEach(async function () {
-            await main.connect(admin).startRound("0x");
+            await startRoundWithSignature(main, rng, admin);
             
             // Agent 구매
-            await itemParts.mint(user1.address, 0, 0, 0, 0);
-            await itemParts.mint(user1.address, 1, 0, 0, 0);
-            await itemParts.mint(user1.address, 2, 0, 0, 0);
-            await itemParts.mint(user1.address, 3, 0, 0, 0);
-            await itemParts.mint(user1.address, 4, 0, 0, 0);
+            const requiredParts = new Set();
+            const maxAttempts = 50;
+            let attempts = 0;
             
-            const itemPartsIds = [0, 1, 2, 3, 4];
+            while (requiredParts.size < 5 && attempts < maxAttempts) {
+                const tx = await itemParts.connect(user1).mint();
+                await tx.wait(); // 블록 확정 대기
+                attempts++;
+                
+                const balance = await itemParts.balanceOf(user1.address);
+                for (let i = 0; i < balance; i++) {
+                    const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                    const tokenInfo = await itemParts.tokenInfo(tokenId);
+                    requiredParts.add(tokenInfo.partsIndex);
+                }
+            }
+            
+            expect(requiredParts.size).to.equal(5);
+            
+            const userTokens = [];
+            const balance = await itemParts.balanceOf(user1.address);
+            for (let i = 0; i < balance; i++) {
+                const tokenId = i; // 순차적으로 증가하는 토큰 ID
+                userTokens.push(tokenId);
+            }
+            
+            const itemPartsIds = userTokens.slice(0, 5);
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = await user1.signTypedData(
                 {

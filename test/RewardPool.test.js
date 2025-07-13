@@ -35,7 +35,7 @@ describe("RewardPool Contract", function () {
         it("owner가 아닌 계정은 STT 토큰 주소를 설정할 수 없어야 한다", async function () {
             await expect(
                 rewardPool.connect(user1).setSttToken(user2.address)
-            ).to.be.revertedWith("Ownable: caller is not the owner");
+            ).to.be.revertedWithCustomError(rewardPool, "OwnableUnauthorizedAccount");
         });
     });
 
@@ -69,7 +69,7 @@ describe("RewardPool Contract", function () {
             
             await expect(
                 rewardPool.connect(user1).withdraw(amount, user2.address)
-            ).to.be.revertedWith("Ownable: caller is not the owner");
+            ).to.be.revertedWithCustomError(rewardPool, "OwnableUnauthorizedAccount");
         });
 
         it("충분한 잔액이 없으면 출금할 수 없어야 한다", async function () {
@@ -97,7 +97,7 @@ describe("RewardPool Contract", function () {
         it("owner가 아닌 계정은 승인을 설정할 수 없어야 한다", async function () {
             await expect(
                 rewardPool.connect(user1).setApproval(user2.address, true)
-            ).to.be.revertedWith("Ownable: caller is not the owner");
+            ).to.be.revertedWithCustomError(rewardPool, "OwnableUnauthorizedAccount");
         });
     });
 }); 
