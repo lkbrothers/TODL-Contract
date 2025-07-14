@@ -621,26 +621,50 @@ contract Main is Ownable {
                 RoundWinnerManageInfo storage roundWinnerInfo = roundWinnerManageInfo[_roundId];
                 winnerCount = roundWinnerInfo.winnerCount;
             }
-            uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
-            uint256 rawPerWinner = totalPrizePayout / winnerCount;
-            uint256 prizePerWinner = (rawPerWinner / Types.SCALE) * Types.SCALE;
-            uint256 donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
-            uint256 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
-            uint256 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
-            uint256 stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
-            // 즉시 출금항목 (donate, corporate, stake, operation)
-            RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-            rewardPool.withdraw(donateAddr, donateAmount);
-            rewardPool.withdraw(corporateAddr, corporateAmount);
-            rewardPool.withdraw(operationAddr, operationAmount);
-            rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], stakedAmount);
+            if(winnerCount > 0) {
+                uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
+                uint256 rawPerWinner = totalPrizePayout / winnerCount;
+                uint256 prizePerWinner = (rawPerWinner / Types.SCALE) * Types.SCALE;
+                uint256 donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
+                uint256 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
+                uint256 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
+                uint256 stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
+                // 즉시 출금항목 (donate, corporate, stake, operation)
+                RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+                rewardPool.withdraw(donateAddr, donateAmount);
+                rewardPool.withdraw(corporateAddr, corporateAmount);
+                rewardPool.withdraw(operationAddr, operationAmount);
+                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], stakedAmount);
+                
+                roundSettleInfo.prizePerWinner = prizePerWinner;
+                roundSettleInfo.donateAmount = donateAmount;
+                roundSettleInfo.corporateAmount = corporateAmount;
+                roundSettleInfo.operationAmount = operationAmount;
+                roundSettleInfo.stakedAmount = stakedAmount;
+                roundSettleInfo.totalPrizePayout = totalPrizePayout;
+            } else {
+                uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
+                uint256 prizePerWinner = 0;
+                uint256 donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
+                uint256 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
+                uint256 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
+                uint256 stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
+                // 즉시 출금항목 (donate, corporate, stake, operation)
+                RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+                rewardPool.withdraw(donateAddr, donateAmount);
+                rewardPool.withdraw(corporateAddr, corporateAmount);
+                rewardPool.withdraw(operationAddr, operationAmount);
+                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], stakedAmount);
+                
+                roundSettleInfo.prizePerWinner = prizePerWinner;
+                roundSettleInfo.donateAmount = donateAmount;
+                roundSettleInfo.corporateAmount = corporateAmount;
+                roundSettleInfo.operationAmount = operationAmount;
+                roundSettleInfo.stakedAmount = stakedAmount;
+                roundSettleInfo.totalPrizePayout = totalPrizePayout;
+            }
             
-            roundSettleInfo.prizePerWinner = prizePerWinner;
-            roundSettleInfo.donateAmount = donateAmount;
-            roundSettleInfo.corporateAmount = corporateAmount;
-            roundSettleInfo.operationAmount = operationAmount;
-            roundSettleInfo.stakedAmount = stakedAmount;
-            roundSettleInfo.totalPrizePayout = totalPrizePayout;
+            
         }
     }
 
