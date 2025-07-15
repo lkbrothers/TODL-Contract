@@ -173,7 +173,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         if(_maxMintPerDay < mintAtTime) {
             revert MaxMintsPerDayOutOfRange(_maxMintPerDay);
         }
-        mintAtTime = _maxMintPerDay;
+        maxMintsPerDay = _maxMintPerDay;
         emit MaxMintPerDayUpdated(_maxMintPerDay);
     }
 
@@ -225,9 +225,9 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
      */
     function setSetNums(string[] memory _setNums) external onlyOwner {
         require(_setNums.length > 0, "Invalid args");
-        delete parts;
-        for(uint i = 0; i < setNums.length; i++) {
-            parts.push(setNums[i]);
+        delete setNums;
+        for(uint i = 0; i < _setNums.length; i++) {
+            setNums.push(_setNums[i]);
         }
         emit SetnumsUpdated(setNums.length);
     }
@@ -242,7 +242,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
             mintedTodayCount[msg.sender] = 0;
             lastMintedDay[msg.sender] = today;
         }
-        if(mintedTodayCount[msg.sender] > MAX_FREE_MINTS_PER_DAY) {
+        if(mintedTodayCount[msg.sender] > maxMintsPerDay) {
             revert DailyLimitsExceeded(block.timestamp);
         }
         bytes32 hash = keccak256(abi.encode(msg.sender, block.timestamp)); // Entropies: msg.sender, block.timestamp
@@ -353,6 +353,28 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     ) public view returns (uint256) {
         bytes32 typeHah = getTypeHash(_partIndex, _originIndex, _setNumsIndex);
         return countPerMintType[typeHah].mintCount - countPerMintType[typeHah].burnCount;
+    }
+
+    /**
+     * @notice 사용자가 오늘 몇 번 더 민팅할 수 있는지 조회
+     * @param _user 조회할 사용자 주소
+     * @return 남은 민팅 횟수
+     */
+    function getRemainingMintsToday(address _user) public view returns (uint256) {
+        uint256 today = block.timestamp / 1 days;
+        uint256 userMintedToday = 0;
+        
+        // 오늘 민팅한 횟수 확인
+        if (lastMintedDay[_user] == today) {
+            userMintedToday = mintedTodayCount[_user];
+        }
+        
+        // 남은 횟수 계산 (최대값 - 오늘 민팅한 횟수)
+        if (userMintedToday >= maxMintsPerDay) {
+            return 0;
+        } else {
+            return maxMintsPerDay - userMintedToday;
+        }
     }
 
     /**

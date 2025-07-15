@@ -25,45 +25,6 @@ contract Main is Ownable {
 
     // def. STRUCT
     /**
-     * @notice 라운드별 관리되어야할 정보
-     * @dev 라운드는 1일 주기 (UTC00:00 ~ UTC23:59)
-     * 동시에 진행되는 라운드는 없어야 한다.
-     * refundedAmount > 0이면, 하기 필드들은 다 0이어야 한다.
-     *     - totalPrizePayout
-     *     - corporateAmount
-     *     - donateAmount
-     *     - operationAmount
-     *     - stakedAmount
-     * status가 End가 아닌데 carriedOutAmount가 >0 일 수는 없다.
-     * winningHash로 Agent 컨트랙트 조회해서 당첨자수도 확인가능
-     */
-    struct RoundManageInfo {
-        Types.RoundStatus status;   /// 라운드 상태
-        uint64 startedAt;           /// 라운드 시작 시각 (startRound 호출시각)
-        uint64 closeTicketAt;       /// 라운드 세일종료 시각 (closeTicketRound 호출시각)
-        uint64 settledAt;           /// 라운드 정산 시각 (settleRound 호출시각)
-        uint64 refundedAt;          /// 라운드 환불 시각 (refund 호출시각)
-        uint64 endedAt;             /// 라운드 종료 시각
-
-        bytes32 winningHash;        /// 최종 당첨 nft type hash
-        uint256 winnerCount;        /// 최종 당첨자 수
-        
-        uint256 depositedAmount;    /// 라운드별 총 모금액
-
-        uint256 totalPrizePayout;   /// 당첨자에게 지불되어야 할 총 금액 (70%)
-        uint256 prizePerWinner;     /// 당첨자 한명에게 지불되어야 할 금액
-        uint256 claimedAmount;      /// 당첨금 수령해간 금액
-
-        uint256 donateAmount;       /// 기부금으로 나간 금액 (10%)
-        uint256 corporateAmount;    /// 투자금으로 나간 금액 (10%)
-        uint256 operationAmount;    /// 운영비 (5%)
-        uint256 stakedAmount;       /// 스테이킹한 금액 (5%)
-
-        uint256 refundedAmount;     /// 환불해간 금액
-
-        uint256 carriedOutAmount;   /// 이월된 금액
-    }
-    /**
      * @notice 라운드별 상태 관리정보
      * @dev 라운드는 1일 주기 (UTC00:00 ~ UTC23:59)
      * 동시에 진행되는 라운드는 없어야 한다.
@@ -140,6 +101,7 @@ contract Main is Ownable {
     event RoundEnd(uint256 indexed roundId);
 
     // def. ERROR
+    error CannotEndRoundYet(uint256 roundId, uint256 startAt, uint256 currentTime);
     error CloseTicketRoundNotReady(uint64 currentTime, uint64 startAt, uint64 availAt);
     error EndRoundNotAllowed(uint256 roundId, uint256 roundStatus);
     error InsufficientCoin(address buyer, uint256 amount);
@@ -414,12 +376,13 @@ contract Main is Ownable {
         } else { // roundStatus == Types.RoundStatus.Refunding
             startedAt = roundStatusInfo.refundedAt;
         }
-        if(uint64(block.timestamp) - startedAt > Types.ROUND_PAYOUT_LIMIT_TIME) {
-            _carryingOutProc(_roundId);
-            roundStatusInfo.endedAt = uint64(block.timestamp);
-            roundStatusInfo.status = Types.RoundStatus.Ended;
-            emit RoundEnd(_roundId);
+        if(uint64(block.timestamp) - startedAt < Types.ROUND_PAYOUT_LIMIT_TIME) {
+            revert CannotEndRoundYet(_roundId, startedAt, block.timestamp);
         }
+        _carryingOutProc(_roundId);
+        roundStatusInfo.endedAt = uint64(block.timestamp);
+        roundStatusInfo.status = Types.RoundStatus.Ended;
+        emit RoundEnd(_roundId);
     }
 
     /**
@@ -485,7 +448,7 @@ contract Main is Ownable {
         }
         {
             RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
-            require(roundStatusInfo.status == Types.RoundStatus.Claiming);
+            require(roundStatusInfo.status == Types.RoundStatus.Claiming, "Round is not claiming");
             if(uint64(block.timestamp) - roundStatusInfo.settledAt > Types.ROUND_PAYOUT_LIMIT_TIME) {
                 _carryingOutProc(_roundId);
                 roundStatusInfo.endedAt = uint64(block.timestamp);
@@ -699,8 +662,11 @@ contract Main is Ownable {
                 );
             }
             uint256 carryingOutAmount = depositedAmount - spentAmount;
-            RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-            rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], carryingOutAmount);
+            if(carryingOutAmount > 0) {
+                RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], carryingOutAmount);
+            }
         }
     }
 }
+

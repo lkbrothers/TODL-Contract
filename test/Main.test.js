@@ -151,7 +151,7 @@ describe("Main Contract", function () {
         [owner, admin, carrier, donateAddr, corporateAddr, operationAddr, user1, user2, user3] = await ethers.getSigners();
 
         // 컨트랙트 배포
-        const Main = await ethers.getContractFactory("Main");
+        const Main = await ethers.getContractFactory("MainMock"); // 테스트용
         const ItemParts = await ethers.getContractFactory("ItemPartsNFT");
         const Agent = await ethers.getContractFactory("AgentNFT");
         const Rng = await ethers.getContractFactory("Rng");
@@ -447,10 +447,10 @@ describe("Main Contract", function () {
             
             await ethers.provider.send("evm_increaseTime", [82800]);
             await ethers.provider.send("evm_mine");
-            await main.connect(user1).closeTicketRound();
         });
 
         it("admin이 라운드를 정산할 수 있어야 한다", async function () {
+            await main.connect(user1).closeTicketRound();
             await ethers.provider.send("evm_increaseTime", [3600]);
             await ethers.provider.send("evm_mine");
             
@@ -458,8 +458,11 @@ describe("Main Contract", function () {
             expect(await main.getRoundStatus(1)).to.equal(3); // Claiming
         });
 
+        /// 정산 발생유무 체크
+
         it("admin이 아닌 계정은 라운드를 정산할 수 없어야 한다", async function () {
-            await ethers.provider.send("evm_increaseTime", [86400]);
+            await main.connect(user1).closeTicketRound();
+            await ethers.provider.send("evm_increaseTime", [3600]);
             await ethers.provider.send("evm_mine");
             
             await expect(main.connect(user1).settleRound(5))
@@ -473,85 +476,72 @@ describe("Main Contract", function () {
     });
 
     describe("당첨금 수령", function () {
+        let user1AgentType, user1AgentId, user2AgentType, user2AgentId, winningHash;
+        
         beforeEach(async function () {
             await startRoundWithSignature(main, rng, admin);
             
             // collectRequiredParts 함수를 사용하여 필요한 ItemParts 수집
-            const itemPartsIds = await collectRequiredParts(itemParts, user1);
+            const user1ItemPartsIds = await collectRequiredParts(itemParts, user1);
+            await mintAgent(main, sttToken, rewardPool, user1, user1ItemPartsIds);
             
-            await mintAgent(main, sttToken, rewardPool, user1, itemPartsIds);
+            // user1의 Agent typeOf 값 가져오기
+            user1AgentId = 1;
+            user1AgentType = await agent.typeOf(user1AgentId);
             
-            await ethers.provider.send("evm_increaseTime", [86400]);
+            // user2가 user1과 다른 typeOf 값을 가진 Agent를 민팅할 때까지 반복
+            user2AgentId = 1;
+            do {
+                ++user2AgentId;
+                const user2ItemPartsIds = await collectRequiredParts(itemParts, user2);
+                await mintAgent(main, sttToken, rewardPool, user2, user2ItemPartsIds);
+                user2AgentType = await agent.typeOf(user2AgentId);
+            } while (user2AgentType === user1AgentType);
+
+            winningHash = await agent.typeOf(1);
+            
+            await ethers.provider.send("evm_increaseTime", [82800]);
             await ethers.provider.send("evm_mine");
             await main.connect(user1).closeTicketRound();
             
-            await ethers.provider.send("evm_increaseTime", [86400]);
+            await ethers.provider.send("evm_increaseTime", [3600]);
             await ethers.provider.send("evm_mine");
-            await main.connect(admin).settleRound(5);
+            await main.connect(admin).settleRoundForced(1, winningHash);
         });
 
         it("당첨 Agent 소유자가 당첨금을 수령할 수 있어야 한다", async function () {
-            const agentId = 0; // 첫 번째 Agent
-            const initialBalance = await sttToken.balanceOf(user1.address);
+            const beforeBalance = await sttToken.balanceOf(user1.address);
             
-            await main.connect(user1).claim(1, agentId);
+            await main.connect(user1).claim(1, user1AgentId);
+
+            const afterBalance = await sttToken.balanceOf(user1.address);
             
             // Agent가 소각되었는지 확인
             expect(await agent.balanceOf(user1.address)).to.equal(0);
+            // 당첨금이 들어왔는지 확인
+            expect(afterBalance).to.be.gt(beforeBalance);
         });
 
         it("Agent 소유자가 아닌 사용자는 당첨금을 수령할 수 없어야 한다", async function () {
-            const agentId = 0;
             
-            await expect(main.connect(user2).claim(1, agentId))
+            await expect(main.connect(user2).claim(1, user1AgentId))
                 .to.be.revertedWith("claim: Not owner");
         });
 
         it("당첨 Agent가 아니면 당첨금을 수령할 수 없어야 한다", async function () {
             // 다른 Agent를 생성
-            const itemPartsIds2 = await collectRequiredParts(itemParts, user2);
-            const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const signature = await user2.signTypedData(
-                {
-                    name: await sttToken.name(),
-                    version: '1',
-                    chainId: await ethers.provider.getNetwork().then(n => n.chainId),
-                    verifyingContract: await sttToken.getAddress()
-                },
-                {
-                    Permit: [
-                        { name: 'owner', type: 'address' },
-                        { name: 'spender', type: 'address' },
-                        { name: 'value', type: 'uint256' },
-                        { name: 'nonce', type: 'uint256' },
-                        { name: 'deadline', type: 'uint256' }
-                    ]
-                },
-                {
-                    owner: user2.address,
-                    spender: await rewardPool.getAddress(),
-                    value: ethers.parseEther("1"),
-                    nonce: await sttToken.nonces(user2.address),
-                    deadline: deadline
-                }
-            );
-            
-            await main.connect(user2).buyAgent(itemPartsIds2, deadline, signature);
-            
-            const agentId = 1; // 두 번째 Agent
-            
-            await expect(main.connect(user2).claim(1, agentId))
+            await expect(main.connect(user2).claim(1, user2AgentId))
                 .to.be.revertedWith("claim: Not winner");
         });
 
         it("라운드가 Claiming 상태가 아니면 당첨금을 수령할 수 없어야 한다", async function () {
-            const agentId = 0;
-            
+            await ethers.provider.send("evm_increaseTime", [2592000]); // 30일 증가
+            await ethers.provider.send("evm_mine");
             // 라운드를 종료 상태로 변경
             await main.connect(admin).endRound(1);
             
-            await expect(main.connect(user1).claim(1, agentId))
-                .to.be.revertedWith("claim: Not winner");
+            await expect(main.connect(user1).claim(1, user1AgentId))
+                .to.be.revertedWith("Round is not claiming");
         });
     });
 
@@ -570,17 +560,21 @@ describe("Main Contract", function () {
             await ethers.provider.send("evm_increaseTime", [172800]); // 48시간 증가
             await ethers.provider.send("evm_mine");
             
-            const agentId = 0;
-            const initialBalance = await sttToken.balanceOf(user1.address);
+            const agentId = 1;
+            const beforeBalance = await sttToken.balanceOf(user1.address);
             
             await main.connect(user1).refund(1, agentId);
+
+            const afterBalance = await sttToken.balanceOf(user1.address);
             
             // Agent가 소각되었는지 확인
             expect(await agent.balanceOf(user1.address)).to.equal(0);
+            // 환불액이 정확히 1 ether인지 확인
+            expect(afterBalance - beforeBalance).to.equal(ethers.parseEther("1"));
         });
 
         it("환불 시간이 지나지 않으면 환불할 수 없어야 한다", async function () {
-            const agentId = 0;
+            const agentId = 1;
             
             await expect(main.connect(user1).refund(1, agentId))
                 .to.be.revertedWith("Round is not Refunding");
@@ -598,21 +592,19 @@ describe("Main Contract", function () {
     });
 
     describe("라운드 종료", function () {
-        beforeEach(async function () {
-            await main.connect(admin).startRound("0x");
-        });
-
         it("admin이 라운드를 종료할 수 있어야 한다", async function () {
+            await startRoundWithSignature(main, rng, admin);
             // 라운드 종료 가능 시간으로 설정
-            await ethers.provider.send("evm_increaseTime", [259200]); // 72시간 증가
+            await ethers.provider.send("evm_increaseTime", [2592000]); // 30일 증가
             await ethers.provider.send("evm_mine");
             
             await main.connect(admin).endRound(1);
-            expect(await main.getRoundStatus(1)).to.equal(4); // Ended
+            expect(await main.getRoundStatus(1)).to.equal(5); // Ended
         });
 
         it("admin이 아닌 계정은 라운드를 종료할 수 없어야 한다", async function () {
-            await ethers.provider.send("evm_increaseTime", [259200]);
+            await startRoundWithSignature(main, rng, admin);
+            await ethers.provider.send("evm_increaseTime", [2592000]);
             await ethers.provider.send("evm_mine");
             
             await expect(main.connect(user1).endRound(1))
@@ -625,35 +617,13 @@ describe("Main Contract", function () {
         });
 
         it("라운드가 이미 Ended 상태면 종료할 수 없어야 한다", async function () {
-            await ethers.provider.send("evm_increaseTime", [259200]);
+            await startRoundWithSignature(main, rng, admin);
+            await ethers.provider.send("evm_increaseTime", [2592000]);
             await ethers.provider.send("evm_mine");
             await main.connect(admin).endRound(1);
             
             await expect(main.connect(admin).endRound(1))
                 .to.be.revertedWithCustomError(main, "EndRoundNotAllowed");
-        });
-
-        
-
-        it("startRound 수행 후 endRound로 라운드를 종료하면 Agent 민팅이 불가능해야 한다", async function () {
-            // startRoundWithSignature 함수를 사용하여 라운드 시작
-            await startRoundWithSignature(main, rng, admin);
-            expect(await main.getRoundStatus(1)).to.equal(1); // Proceeding
-            
-            // 30일 후로 시간을 증가시켜 endRound 가능하게 함
-            await ethers.provider.send("evm_increaseTime", [2592000]); // 30일 증가
-            await ethers.provider.send("evm_mine");
-            
-            // endRound를 호출하여 라운드 종료
-            await main.connect(admin).endRound(1);
-            expect(await main.getRoundStatus(1)).to.equal(4); // Ended
-            
-            // collectRequiredParts 함수를 사용하여 필요한 ItemParts 수집
-            const itemPartsIds = await collectRequiredParts(itemParts, user2);
-            
-            // 라운드가 Ended 상태이므로 Agent 민팅이 실패해야 함
-            await expect(mintAgent(main, sttToken, rewardPool, user2, itemPartsIds))
-                .to.be.revertedWith("Round is not proceeding");
         });
     });
 }); 

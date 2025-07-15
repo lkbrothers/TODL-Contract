@@ -1,4 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
+require('dotenv').config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -18,6 +19,10 @@ module.exports = {
   networks: {
     hardhat: {
       loggingEnabled: false
+    },
+    LKtestnet: {
+      url: `http://211.104.148.180:8545`,
+      accounts: [process.env.PRIVATE_KEY]
     }
   }
 };
