@@ -28,6 +28,6 @@ contract MainMock is Main {
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
         roundStatusInfo.status = Types.RoundStatus.Claiming;
         roundStatusInfo.settledAt = uint64(block.timestamp);
-        emit RoundSettled(_roundId);
+        emit RoundSettled(_roundId, _winnerHash);
     }
 }

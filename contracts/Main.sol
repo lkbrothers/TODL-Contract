@@ -91,8 +91,12 @@ contract Main is Ownable {
     /**
      * @notice 라운드 정산 이벤트
      * @param roundId 정산된 라운드 ID
+     * @param winningHash 당첨 Agent hash
      */
-    event RoundSettled(uint256 indexed roundId);
+    event RoundSettled(
+        uint256 indexed roundId,
+        bytes32 winningHash
+    );
 
     /**
      * @notice 라운드 종료 이벤트
@@ -345,12 +349,12 @@ contract Main is Ownable {
             AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
             (uint mintCount,) = agent.mintTypeCountPerRound(roundId, roundWinnerInfo.winningHash); // 최종 당첨자 수
             roundWinnerInfo.winnerCount = mintCount;
+            emit RoundSettled(roundId, winningHash);
         }
         _settlePrize(roundId); // 분배할 금액 정산
 
         roundStatusInfo.status = Types.RoundStatus.Claiming;
         roundStatusInfo.settledAt = uint64(block.timestamp);
-        emit RoundSettled(roundId);
     }
 
     /**

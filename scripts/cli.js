@@ -25,7 +25,7 @@ async function main() {
     }
 
     const action = args[0];
-    const actionArgs = args.slice(1);
+    const actionArgs = args.slice(1); // action에 종속적인 argument들이 있을 경우 필요
 
     try {
         // deployment-info.json 파일 읽기
@@ -55,7 +55,17 @@ async function main() {
             
             // 결과 로깅
             logContractStatus(result.contractStatus);
-            logMintingProcess(itemPartsAddress, { address: result.minter, provider: { connection: { url: process.env.PROVIDER_URL || "http://localhost:8545" } } }, result.remainingMints, { hash: result.transactionHash }, result.totalSupply, result.remainingMints);
+            logMintingProcess(itemPartsAddress, {
+                    address: result.minter, 
+                    provider: { 
+                        connection: { 
+                            url: process.env.PROVIDER_URL || "http://localhost:8545" 
+                        } 
+                    } 
+                }, result.remainingMints, { 
+                    hash: result.transactionHash 
+                }, result.totalSupply, result.remainingMints
+            );
             logMintedTokens(result.mintedTokens);
             logMintingResult(result);
             
