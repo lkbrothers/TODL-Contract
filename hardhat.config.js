@@ -1,4 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("@typechain/hardhat");
 require('dotenv').config();
 
 /** @type import('hardhat/config').HardhatUserConfig */
@@ -12,6 +13,10 @@ module.exports = {
       },
       viaIR: false,
     },
+  },
+  typechain: {
+    outDir: "types",        // 타입 생성 디렉토리
+    target: "ethers-v6",    // 꼭 v6로 지정
   },
   mocha: {
     timeout: 40000
