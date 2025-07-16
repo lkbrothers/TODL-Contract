@@ -100,6 +100,7 @@ function formatMintingResult(wallet, mintTx, mintedTokens, totalSupplyAfter, rem
     return {
         minter: wallet.address,
         transactionHash: mintTx.hash,
+        blockNumber: mintTx.receipt.blockNumber,
         mintedTokens: mintedTokens,
         totalSupply: totalSupplyAfter.toString(),
         remainingMints: remainingAfter.toString(),
@@ -214,6 +215,7 @@ function logMintingProcess(itemPartsAddress, wallet, remainingBefore, mintTx, to
     console.log("🎨 민터 주소:", wallet.address);
     console.log("📈 민팅 전 남은 횟수:", remainingBefore.toString());
     console.log("✅ 민팅 완료! 트랜잭션 해시:", mintTx.hash);
+    console.log("📦 블록 번호:", mintTx.receipt.blockNumber);
     console.log("\n📊 민팅 후 상태:");
     console.log("  - 총 발행량:", totalSupplyAfter.toString());
     console.log("  - 남은 민팅 횟수:", remainingAfter.toString());

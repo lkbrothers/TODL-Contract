@@ -135,7 +135,8 @@ async function main() {
                 reserv: reservAddr
             },
             managedContracts: managedContracts,
-            deploymentTime: new Date().toISOString()
+            deploymentTime: new Date().toISOString(),
+            deploymentBlock: await ethers.provider.getBlockNumber()
         };
 
         console.log("\n💾 배포 정보를 scripts/output/deployment-info.json 파일에 저장합니다...");
