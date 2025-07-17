@@ -626,4 +626,116 @@ describe("Main Contract", function () {
                 .to.be.revertedWithCustomError(main, "EndRoundNotAllowed");
         });
     });
+
+    describe("라운드 정산 - 당첨자 없음", function () {
+        let round1DepositedAmount, round2InitialDepositedAmount;
+        
+        beforeEach(async function () {
+            await startRoundWithSignature(main, rng, admin);
+            
+            // user1이 Agent를 민팅하여 라운드 1에 1 ether 입금
+            const user1ItemPartsIds = await collectRequiredParts(itemParts, user1);
+            await mintAgent(main, sttToken, rewardPool, user1, user1ItemPartsIds);
+            
+            // 라운드 1의 총 입금액 확인
+            round1DepositedAmount = ethers.parseEther("1");
+            // 23간 증가하여 세일 종료 가능 시간으로 설정
+            await ethers.provider.send("evm_increaseTime", [82800]);
+            await ethers.provider.send("evm_mine");
+            
+            // 라운드 1 세일 종료
+            await main.connect(user1).closeTicketRound();
+            
+            //1시간 증가하여 정산 가능 시간으로 설정
+            await ethers.provider.send("evm_increaseTime", [3600]);
+            await ethers.provider.send("evm_mine");
+        });
+
+        it("당첨자가 없을 때30%는 즉시 분배되고 70는 다음 라운드로 이월되어야 한다", async function () {
+            // 각 주소의 초기 잔액 저장
+            const donateInitialBalance = BigInt((await sttToken.balanceOf(donateAddr)).toString());
+            const corporateInitialBalance = BigInt((await sttToken.balanceOf(corporateAddr)).toString());
+            const operationInitialBalance = BigInt((await sttToken.balanceOf(operationAddr)).toString());
+            const stakePoolInitialBalance = BigInt((await sttToken.balanceOf(stakePool.getAddress())).toString());
+            
+            // 라운드 2 시작 전 초기 상태 확인
+            const round2BeforeSettle = await main.roundSettleManageInfo(2);
+            round2InitialDepositedAmount = round2BeforeSettle.depositedAmount;
+            
+            // 당첨자가 없는 상태로 정산 (winnerCount = 0)
+            await main.connect(admin).settleRoundForced(1, ethers.keccak256("0x")); // 존재하지 않는 해시로 설정하여 당첨자 없음
+            
+            // 라운드 1 정산 정보 확인
+            const round1SettleInfo = await main.roundSettleManageInfo(1);
+            
+            // 30% 즉시 분배 확인 (1 ether *0.3ether)
+            const expectedDonateAmount = (round1DepositedAmount * 10n) / 100n; // 10%
+            const expectedCorporateAmount = (round1DepositedAmount * 10n) / 100n; // 10%
+            const expectedOperationAmount = (round1DepositedAmount * 5n) / 100n; // 5%
+            const expectedStakedAmount = (round1DepositedAmount * 5n) / 100n; // 5%
+            
+            expect(round1SettleInfo.donateAmount).to.equal(expectedDonateAmount);
+            expect(round1SettleInfo.corporateAmount).to.equal(expectedCorporateAmount);
+            expect(round1SettleInfo.operationAmount).to.equal(expectedOperationAmount);
+            expect(round1SettleInfo.stakedAmount).to.equal(expectedStakedAmount);
+            
+            // 당첨자가 없으므로 당첨금 관련 값들은 0
+            expect(round1SettleInfo.totalPrizePayout).to.equal(0);
+            expect(round1SettleInfo.prizePerWinner).to.equal(0);
+            
+            // 실제 잔액 변화 확인
+            const donateAfterBalance = BigInt((await sttToken.balanceOf(donateAddr)).toString());
+            const corporateAfterBalance = BigInt((await sttToken.balanceOf(corporateAddr)).toString());
+            const operationAfterBalance = BigInt((await sttToken.balanceOf(operationAddr)).toString());
+            const stakePoolAfterBalance = BigInt((await sttToken.balanceOf(stakePool.getAddress())).toString());
+            
+            expect(donateAfterBalance - donateInitialBalance).to.equal(expectedDonateAmount);
+            expect(corporateAfterBalance - corporateInitialBalance).to.equal(expectedCorporateAmount);
+            expect(operationAfterBalance - operationInitialBalance).to.equal(expectedOperationAmount);
+            expect(stakePoolAfterBalance - stakePoolInitialBalance).to.equal(expectedStakedAmount);
+            
+            // 라운드 2에 70% 이월 확인
+            const round2AfterSettle = await main.roundSettleManageInfo(2);
+            const expectedCarriedAmount = (round1DepositedAmount * 70n) / 100n; //70      
+            expect(round2AfterSettle.depositedAmount - round2InitialDepositedAmount).to.equal(expectedCarriedAmount);
+        });
+
+        it("당첨자가 없을 때 라운드 상태가 Claiming으로 변경되어야 한다", async function () {
+            await main.connect(admin).settleRoundForced(1, ethers.keccak256("0x"));      
+            // 라운드 1 상태가 Claiming으로 변경되었는지 확인
+            expect(await main.getRoundStatus(1)).to.equal(3); // Claiming
+        });
+
+        it("당첨자가 없을 때 다음 라운드에서 이월된 금액으로 Agent를 민팅할 수 있어야 한다", async function () {
+            // 라운드 1 정산 (당첨자 없음)
+            await main.connect(admin).settleRoundForced(1, ethers.keccak256("0x"));      
+            // 라운드 2 시작
+            await startRoundWithSignature(main, rng, admin,2);      
+            // 라운드 2의 초기 depositedAmount 확인 (이월된 금액)
+            const round2InitialSettleInfo = await main.roundSettleManageInfo(2);
+            const expectedCarriedAmount = (round1DepositedAmount * 70n) / 100n; // 70%
+            expect(round2InitialSettleInfo.depositedAmount).to.equal(expectedCarriedAmount);
+            
+            // user2가 Agent를 민팅 (이월된 금액으로)
+            const user2ItemPartsIds = await collectRequiredParts(itemParts, user2);
+            await mintAgent(main, sttToken, rewardPool, user2, user2ItemPartsIds);
+            
+            // 라운드 2의 총 depositedAmount 확인 (이월된 금액 + 새로운 민팅비)
+            const round2AfterMintSettleInfo = await main.roundSettleManageInfo(2);
+            expect(round2AfterMintSettleInfo.depositedAmount).to.equal(expectedCarriedAmount + ethers.parseEther("1"));      
+            // Agent가 정상적으로 민팅되었는지 확인
+            expect(await agent.balanceOf(user2.address)).to.equal(1);
+        });
+
+        it("당첨자가 없을 때 정산 후 30일 지나면 라운드가 종료되어야 한다", async function () {
+            await main.connect(admin).settleRoundForced(1, ethers.keccak256("0x"));      
+            // 30일(2592000초) 증가
+            await ethers.provider.send("evm_increaseTime", [2592000]);
+            await ethers.provider.send("evm_mine");
+            // endRound 호출로 상태 전이 트리거
+            await main.connect(admin).endRound(1);
+            // 라운드 1이 Ended 상태로 변경되었는지 확인
+            expect(await main.getRoundStatus(1)).to.equal(5); // Ended
+        });
+    });
 }); 

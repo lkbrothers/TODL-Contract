@@ -628,7 +628,10 @@ contract Main is Ownable {
                 roundSettleInfo.corporateAmount = corporateAmount;
                 roundSettleInfo.operationAmount = operationAmount;
                 roundSettleInfo.stakedAmount = stakedAmount;
-                roundSettleInfo.totalPrizePayout = totalPrizePayout;
+                roundSettleInfo.totalPrizePayout = 0;
+                // 상금은 다음라운드로 즉시 이월된다. (묻고 따블로가!)
+                RoundSettleManageInfo storage nextRoundSettleInfo = roundSettleManageInfo[_roundId+1];
+                nextRoundSettleInfo.depositedAmount = totalPrizePayout;
             }
             
             

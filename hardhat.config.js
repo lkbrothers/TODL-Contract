@@ -26,7 +26,7 @@ module.exports = {
       loggingEnabled: false
     },
     LKtestnet: {
-      url: `http://211.104.148.180:8545`,
+      url: process.env.PROVIDER_URL,
       accounts: [process.env.PRIVATE_KEY]
     }
   }
