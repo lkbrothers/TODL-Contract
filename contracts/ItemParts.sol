@@ -59,12 +59,14 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
      * @notice 민팅 이벤트
      * @dev 민팅횟수당 1회씩 발생
      * @param tokenId 민팅된 토큰ID
+     * @param owner 소유자 주소
      * @param partsIndex 민팅된 토큰의 parts 인덱스
      * @param originsIndex 민팅된 토큰의 origins 인덱스
      * @param setNumsIndex 민팅된 토큰의 setNums 인덱스
      */
     event Minted(
         uint256 indexed tokenId,
+        address indexed owner,
         uint256 partsIndex,
         uint256 originsIndex,
         uint256 setNumsIndex
@@ -255,7 +257,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
             uint256 tokenId = ++totalSupply;
             // 민트
             _mint(msg.sender, tokenId);
-            emit Minted(tokenId, partIndex, originIndex, setNumsIndex);
+            emit Minted(tokenId, msg.sender, partIndex, originIndex, setNumsIndex);
             // tokenURI 설정
             string memory tokenUri = string(
                 abi.encodePacked(

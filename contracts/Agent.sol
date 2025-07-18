@@ -24,6 +24,7 @@ contract AgentNFT is ERC721URIStorage, Ownable {
      * @dev 부위 오더링은 아래 지라링크 참조
      * https://lkbrothers.atlassian.net/browse/SGD-169
      * @param tokenId 민팅된 토큰 ID
+     * @param owner 소유자 주소
      * @param headId Head 부위 itemParts NFT
      * @param bodyId Body 부위 itemParts NFT
      * @param legId Leg 부위 itemParts NFT
@@ -32,6 +33,7 @@ contract AgentNFT is ERC721URIStorage, Ownable {
      */
     event Minted(
         uint256 indexed tokenId,
+        address indexed owner,
         uint256 headId,
         uint256 bodyId,
         uint256 legId,
@@ -128,6 +130,7 @@ contract AgentNFT is ERC721URIStorage, Ownable {
         _mint(_to, tokenId);
         emit Minted(
             tokenId,
+            _to,
             itemPartsIds[0],
             itemPartsIds[1],
             itemPartsIds[2],

@@ -59,9 +59,9 @@ library Types {
      * @dev NFT의 기원을 정의
      */
     enum Origins {
-        Todl,      /// TODL 기원
-        Earthling, /// 지구인 기원
-        BadGen,    /// BadGen 기원
+        Todl,      /// TODL
+        Earthling, /// Earthling
+        BadGen,    /// BadGen
         Max        /// End-of-enum
     }
 
@@ -83,9 +83,9 @@ library Types {
      * @dev ItemParts NFT의 민팅 정보를 저장
      */
     struct MintTypeInfo {
-        uint256 partsIndex;    /// 부위 인덱스
-        uint256 originsIndex;  /// 기원 인덱스
-        uint256 setNumsIndex;  /// 세트 번호 인덱스
+        uint256 partsIndex;    /// Parts 인덱스
+        uint256 originsIndex;  /// Origins 인덱스
+        uint256 setNumsIndex;  /// SetNums 인덱스
         bytes32 typeHash;      /// 타입 해시값
         string typeName;       /// 타입명
     }

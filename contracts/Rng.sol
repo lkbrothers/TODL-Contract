@@ -16,16 +16,6 @@ import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 contract Rng is EIP712, Ownable {
     using ECDSA for bytes32;
 
-    // def. CONSTANT
-    uint256 public constant ENTROPY_FACTOR1 = 6;  /// 첫 번째 엔트로피 팩터
-    uint256 public constant ENTROPY_FACTOR2 = 16; /// 두 번째 엔트로피 팩터
-    bytes32 public constant SIGDATA_TYPEHASH =    /// 서명 데이터 타입 해시
-        keccak256("SigData(uint256 roundId,uint256 randSeed)");
-
-    // def. VARIABLE
-    address public mainAddr;    /// 라운드시작, 종료, 정산을 관장할 컨트랙트
-    address public signerAddr;  /// commit 시 기록될 시그니처 주인
-
     // def. STRUCT
     /**
      * @notice 라운드별 기록될 Rng 정보
@@ -38,8 +28,6 @@ contract Rng is EIP712, Ownable {
         bytes32 finalRands; /// 최종 난수 (reveal 이후 확정됨)
         bytes signature;    /// 라운드 시작 시 입력된 RoundSeedInfo에 대한 signer 서명
     }
-
-    mapping(uint256 => RoundRngInfo) public roundRngInfo; /// 라운드별 RngInfo 저장용 매핑변수
 
     // def. EVENT
     /**
@@ -76,6 +64,18 @@ contract Rng is EIP712, Ownable {
         uint256 indexed seed, 
         bytes32 finalNum
     );
+    
+    // def. CONSTANT
+    uint256 public constant ENTROPY_FACTOR1 = 6;  /// 첫 번째 엔트로피 팩터
+    uint256 public constant ENTROPY_FACTOR2 = 16; /// 두 번째 엔트로피 팩터
+    bytes32 public constant SIGDATA_TYPEHASH =    /// 서명 데이터 타입 해시
+        keccak256("SigData(uint256 roundId,uint256 randSeed)");
+
+    // def. VARIABLE
+    address public mainAddr;    /// 라운드시작, 종료, 정산을 관장할 컨트랙트
+    address public signerAddr;  /// commit 시 기록될 시그니처 주인
+
+    mapping(uint256 => RoundRngInfo) public roundRngInfo; /// 라운드별 RngInfo 저장용 매핑변수
 
     /**
      * @notice Rng 컨트랙트 생성자
