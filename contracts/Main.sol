@@ -240,11 +240,11 @@ contract Main is Ownable {
      * @param _signature 데이터 서명
      */
     function startRound(bytes calldata _signature) external onlyAdmin {
-        if(roundId > 0) {
-            if(uint8(roundStatusManageInfo[roundId].status) < uint8(Types.RoundStatus.Claiming)) {
-                revert LastRoundNotEnded(roundId, uint8(roundStatusManageInfo[roundId].status));
-            }
-        }
+        // if(roundId > 0) {
+        //     if(uint8(roundStatusManageInfo[roundId].status) < uint8(Types.RoundStatus.Claiming)) {
+        //         revert LastRoundNotEnded(roundId, uint8(roundStatusManageInfo[roundId].status));
+        //     }
+        // }
         ++roundId; // new round!
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         (bool success, ) = managedContracts[uint8(Types.ContractTags.Rng)].call(
@@ -269,18 +269,18 @@ contract Main is Ownable {
      */
     function closeTicketRound() external {
         require(admins[msg.sender] != true, "Not permitted");
-        AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
-        require(agent.balanceOfPerRound(roundId, msg.sender) > 0, "Not Owned Agent");
+        // AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
+        // require(agent.balanceOfPerRound(roundId, msg.sender) > 0, "Not Owned Agent");
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         require(roundStatusInfo.status == Types.RoundStatus.Proceeding, "Round is not proceeding");
         uint64 startedTimeEstimated = roundStatusInfo.startedAt % Types.ROUND_PERIOD;
-        if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
-            revert CloseTicketRoundNotReady(
-                uint64(block.timestamp), 
-                startedTimeEstimated, 
-                (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
-            );
-        }
+        // if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
+        //     revert CloseTicketRoundNotReady(
+        //         uint64(block.timestamp), 
+        //         startedTimeEstimated, 
+        //         (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
+        //     );
+        // }
 
         (bool success, ) = managedContracts[uint8(Types.ContractTags.Rng)].call(
             abi.encodeWithSelector(
@@ -315,13 +315,13 @@ contract Main is Ownable {
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         require(roundStatusInfo.status == Types.RoundStatus.Drawing, "Round is not drawing");
         uint64 startedTimeEstimated = roundStatusInfo.startedAt % Types.ROUND_PERIOD;
-        if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_SETTLE_AVAIL_TIME)) {
-            revert CloseTicketRoundNotReady(
-                uint64(block.timestamp), 
-                startedTimeEstimated, 
-                (startedTimeEstimated + uint64(Types.ROUND_SETTLE_AVAIL_TIME))
-            );
-        }
+        // if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_SETTLE_AVAIL_TIME)) {
+        //     revert CloseTicketRoundNotReady(
+        //         uint64(block.timestamp), 
+        //         startedTimeEstimated, 
+        //         (startedTimeEstimated + uint64(Types.ROUND_SETTLE_AVAIL_TIME))
+        //     );
+        // }
 
         (bool success, ) = managedContracts[uint8(Types.ContractTags.Rng)].call(
             abi.encodeWithSelector(
@@ -351,7 +351,7 @@ contract Main is Ownable {
             roundWinnerInfo.winnerCount = mintCount;
             emit RoundSettled(roundId, winningHash);
         }
-        _settlePrize(roundId); // 분배할 금액 정산
+        // _settlePrize(roundId); // 분배할 금액 정산
 
         roundStatusInfo.status = Types.RoundStatus.Claiming;
         roundStatusInfo.settledAt = uint64(block.timestamp);
