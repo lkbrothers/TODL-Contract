@@ -129,7 +129,7 @@ async function createPermitSignature(sttAddress, wallet, deadline, amount, main)
             deadline: deadline
         };
         
-        const signature = await wallet._signTypedData(domain, types, message);
+        const signature = await wallet.signTypedData(domain, types, message);
         return signature;
     } catch (error) {
         throw new Error(`Permit 서명 생성 실패: ${error.message}`);
@@ -139,7 +139,7 @@ async function createPermitSignature(sttAddress, wallet, deadline, amount, main)
 // 7. RewardPool 주소 가져오기
 async function getRewardPoolAddress(main) {
     try {
-        const managedContracts = await main.managedContracts(3); // RewardPool은 3번 인덱스
+        const managedContracts = await main.managedContracts(4); // RewardPool은 4번 인덱스
         return managedContracts;
     } catch (error) {
         throw new Error(`RewardPool 주소 조회 실패: ${error.message}`);
@@ -158,11 +158,11 @@ async function executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig) 
 }
 
 // 9. 결과 포맷팅
-function formatBuyAgentResult(wallet, buyAgentTx, itemPartsIds, roundId, contractStatus) {
+function formatBuyAgentResult(wallet, buyAgentTx, receipt, itemPartsIds, roundId, contractStatus) {
     return {
         buyer: wallet.address,
         transactionHash: buyAgentTx.hash,
-        blockNumber: buyAgentTx.receipt.blockNumber,
+        blockNumber: receipt.blockNumber,
         itemPartsIds: itemPartsIds,
         roundId: roundId.toString(),
         buyTime: new Date().toISOString(),
@@ -213,14 +213,14 @@ async function buyAgent(mainAddress, itemPartsIds, customProvider = null, custom
         // 7. STT Permit 서명 생성
         const deadline = Math.floor(Date.now() / 1000) + 3600; // 1시간 후 만료
         const amount = ethers.parseEther("1"); // 1 STT
-        const sttAddress = await main.managedContracts(4); // STT는 4번 인덱스
+        const sttAddress = await main.managedContracts(7); // STT는 7번 인덱스
         const permitSig = await createPermitSignature(sttAddress, wallet, deadline, amount, main);
 
         // 8. buyAgent 실행
-        const { transaction: buyAgentTx } = await executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig);
+        const { transaction: buyAgentTx, receipt } = await executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig);
 
         // 9. 결과 포맷팅
-        const result = formatBuyAgentResult(wallet, buyAgentTx, itemPartsIds, roundId, contractStatus);
+        const result = formatBuyAgentResult(wallet, buyAgentTx, receipt, itemPartsIds, roundId, contractStatus);
 
         return result;
 
@@ -285,7 +285,7 @@ function logBuyAgentResult(result) {
     console.log("  - 구매 시간:", result.buyTime);
 }
 
-function logBuyAgentProcess(mainAddress, wallet, itemPartsIds, roundStatus, coinBalance, ownershipChecks, buyAgentTx) {
+function logBuyAgentProcess(mainAddress, wallet, itemPartsIds, roundStatus, coinBalance, ownershipChecks, buyAgentTx, receipt) {
     console.log("🌐 Provider URL:", wallet.provider.connection.url);
     console.log("🎯 Main 컨트랙트 buyAgent를 시작합니다...");
     console.log("🎯 Main 컨트랙트 주소:", mainAddress);
@@ -294,7 +294,7 @@ function logBuyAgentProcess(mainAddress, wallet, itemPartsIds, roundStatus, coin
     console.log("📊 라운드 상태:", roundStatus);
     console.log("💰 STT 잔액:", ethers.formatEther(coinBalance));
     console.log("✅ buyAgent 완료! 트랜잭션 해시:", buyAgentTx.hash);
-    console.log("📦 블록 번호:", buyAgentTx.receipt.blockNumber);
+    console.log("📦 블록 번호:", receipt.blockNumber);
 }
 
 // 모듈로 export

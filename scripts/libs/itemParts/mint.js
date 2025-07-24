@@ -96,11 +96,11 @@ async function getMintedTokensInfo(itemParts, totalSupplyAfter, mintAtTimeValue)
 }
 
 // 6. 결과 포맷팅
-function formatMintingResult(wallet, mintTx, mintedTokens, totalSupplyAfter, remainingAfter, contractStatus) {
+function formatMintingResult(wallet, mintTx, receipt, mintedTokens, totalSupplyAfter, remainingAfter, contractStatus) {
     return {
         minter: wallet.address,
         transactionHash: mintTx.hash,
-        blockNumber: mintTx.receipt.blockNumber,
+        blockNumber: receipt.blockNumber,
         mintedTokens: mintedTokens,
         totalSupply: totalSupplyAfter.toString(),
         remainingMints: remainingAfter.toString(),
@@ -140,10 +140,10 @@ async function mintItemParts(itemPartsAddress, customProvider = null, customWall
         
         // 4. 민팅 전 상태 확인
         const remainingBefore = await checkMintingStatus(itemParts, wallet.address);
-
+console.log('1111')
         // 5. 민팅 실행
-        const { transaction: mintTx } = await executeMinting(itemParts, wallet);
-
+        const { transaction: mintTx, receipt } = await executeMinting(itemParts, wallet);
+console.log('2222')
         // 6. 민팅 후 상태 확인
         const totalSupplyAfter = await itemParts.totalSupply();
         const remainingAfter = await checkMintingStatus(itemParts, wallet.address);
@@ -152,7 +152,7 @@ async function mintItemParts(itemPartsAddress, customProvider = null, customWall
         const mintedTokens = await getMintedTokensInfo(itemParts, totalSupplyAfter, contractStatus.mintAtTime);
 
         // 8. 결과 포맷팅
-        const result = formatMintingResult(wallet, mintTx, mintedTokens, totalSupplyAfter, remainingAfter, contractStatus);
+        const result = formatMintingResult(wallet, mintTx, receipt, mintedTokens, totalSupplyAfter, remainingAfter, contractStatus);
 
         return result;
 
@@ -208,17 +208,17 @@ function logMintingResult(result) {
     console.log("  - 민팅 시간:", result.mintTime);
 }
 
-function logMintingProcess(itemPartsAddress, wallet, remainingBefore, mintTx, totalSupplyAfter, remainingAfter) {
+function logMintingProcess(itemPartsAddress, wallet, remainingBefore, mintTx, blockNumber, totalSupplyAfter, remainingAfter) {
     console.log("🌐 Provider URL:", wallet.provider.connection.url);
     console.log("🎨 ItemParts NFT 민팅을 시작합니다...");
     console.log("🎯 ItemParts 컨트랙트 주소:", itemPartsAddress);
     console.log("🎨 민터 주소:", wallet.address);
     console.log("📈 민팅 전 남은 횟수:", remainingBefore.toString());
     console.log("✅ 민팅 완료! 트랜잭션 해시:", mintTx.hash);
-    console.log("📦 블록 번호:", mintTx.receipt.blockNumber);
+    console.log("📦 블록 번호:", blockNumber);
     console.log("\n📊 민팅 후 상태:");
     console.log("  - 총 발행량:", totalSupplyAfter.toString());
-    console.log("  - 남은 민팅 횟수:", remainingAfter.toString());
+    console.log("  - 남은 민팅 횟수:", remainingAfter ? remainingAfter.toString() : "확인 불가");
 }
 
 // 모듈로 export
@@ -251,7 +251,14 @@ if (require.main === module) {
         .then((result) => {
             // CLI에서만 로깅 출력
             logContractStatus(result.contractStatus);
-            logMintingProcess(itemPartsAddress, { address: result.minter, provider: { connection: { url: process.env.PROVIDER_URL || "http://localhost:8545" } } }, result.remainingMints, { hash: result.transactionHash }, result.totalSupply, result.remainingMints);
+            logMintingProcess(
+                itemPartsAddress, 
+                { address: result.minter, provider: { connection: { url: process.env.PROVIDER_URL || "http://localhost:8545" } } }, 
+                result.remainingMints, 
+                { hash: result.transactionHash }, 
+                { blockNumber: result.blockNumber}, 
+                result.totalSupply, 
+                result.remainingMints);
             logMintedTokens(result.mintedTokens);
             logMintingResult(result);
             console.log("\n🎯 민팅 스크립트 실행 완료");

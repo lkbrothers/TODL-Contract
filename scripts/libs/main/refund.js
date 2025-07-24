@@ -147,11 +147,11 @@ async function executeRefund(main, wallet, roundId, agentId) {
 }
 
 // 10. 결과 포맷팅
-function formatRefundResult(wallet, refundTx, roundId, agentId, contractStatus) {
+function formatRefundResult(wallet, refundTx, receipt, roundId, agentId, contractStatus) {
     return {
         refunder: wallet.address,
         transactionHash: refundTx.hash,
-        blockNumber: refundTx.receipt.blockNumber,
+        blockNumber: receipt.blockNumber,
         roundId: roundId.toString(),
         agentId: agentId.toString(),
         refundTime: new Date().toISOString(),
@@ -207,10 +207,10 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
         const availability = await checkRefundAvailability(main, roundId);
         
         // 10. refund 실행
-        const { transaction: refundTx } = await executeRefund(main, wallet, roundId, agentId);
+        const { transaction: refundTx, receipt } = await executeRefund(main, wallet, roundId, agentId);
 
         // 11. 결과 포맷팅
-        const result = formatRefundResult(wallet, refundTx, roundId, agentId, contractStatus);
+        const result = formatRefundResult(wallet, refundTx, receipt, roundId, agentId, contractStatus);
 
         return result;
 
@@ -294,7 +294,7 @@ function logRefundResult(result) {
     console.log("  - 환불 시간:", result.refundTime);
 }
 
-function logRefundProcess(mainAddress, wallet, roundId, agentId, roundStatus, ownership, agentInfo, roundInfo, settleInfo, availability, refundTx) {
+function logRefundProcess(mainAddress, wallet, roundId, agentId, roundStatus, ownership, agentInfo, roundInfo, settleInfo, availability, refundTx, receipt) {
     console.log("🌐 Provider URL:", wallet.provider.connection.url);
     console.log("🎯 Main 컨트랙트 refund를 시작합니다...");
     console.log("🎯 Main 컨트랙트 주소:", mainAddress);
@@ -306,7 +306,7 @@ function logRefundProcess(mainAddress, wallet, roundId, agentId, roundStatus, ow
     console.log("💰 총 모금액:", ethers.formatEther(settleInfo.depositedAmount));
     console.log("⏰ 환불 가능 여부:", availability.isAvailable ? "가능" : "불가능");
     console.log("✅ refund 완료! 트랜잭션 해시:", refundTx.hash);
-    console.log("📦 블록 번호:", refundTx.receipt.blockNumber);
+    console.log("📦 블록 번호:", receipt.blockNumber);
 }
 
 // 모듈로 export

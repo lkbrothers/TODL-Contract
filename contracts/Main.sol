@@ -271,14 +271,14 @@ contract Main is Ownable {
         require(admins[msg.sender] != true, "Not permitted");
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         require(roundStatusInfo.status == Types.RoundStatus.Proceeding, "Round is not proceeding");
-        uint64 startedTimeEstimated = roundStatusInfo.startedAt % Types.ROUND_PERIOD;
-        if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
-            revert CloseTicketRoundNotReady(
-                uint64(block.timestamp), 
-                startedTimeEstimated, 
-                (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
-            );
-        }
+        uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+        // if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
+        //     revert CloseTicketRoundNotReady(
+        //         uint64(block.timestamp), 
+        //         startedTimeEstimated, 
+        //         (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
+        //     );
+        // }
 
         (bool success, ) = managedContracts[uint8(Types.ContractTags.Rng)].call(
             abi.encodeWithSelector(
@@ -496,6 +496,21 @@ contract Main is Ownable {
             uint256 amount = Types.AGENT_MINTING_FEE;
             rewardPool.withdraw(msg.sender, amount);
             roundSettleInfo.refundedAmount += amount;
+        }
+    }
+
+    /**
+     * @notice 현재 라운드에서 CloseTicketRound이 가능한 남은시간을 조회한다.
+     * @dev 라운드가 proceeding이 아닌 상태일 경우, 0xffffffff가 반환된다.
+     * @return remainTime CloseTicketRound이 가능한 남은시간
+     */
+    function getRemainTimeCloseTicketRound() external view returns (uint256 remainTime) {
+        remainTime = 0xffffffff;
+        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
+        if(roundStatusInfo.status == Types.RoundStatus.Proceeding) {
+            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+            uint64 elapsedTime = uint64(block.timestamp) - startedTimeEstimated;
+            remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
         }
     }
     

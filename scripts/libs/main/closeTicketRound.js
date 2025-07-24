@@ -63,47 +63,27 @@ async function getRoundInfo(main, roundId) {
     }
 }
 
-// 5. Agent NFT 보유량 확인
-async function checkAgentOwnership(main, walletAddress, roundId) {
-    try {
-        const agentAddress = await main.managedContracts(0); // Agent는 0번 인덱스
-        const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, main.provider);
-        
-        const balance = await agent.balanceOfPerRound(roundId, walletAddress);
-        return balance;
-    } catch (error) {
-        throw new Error(`Agent 보유량 확인 실패: ${error.message}`);
-    }
-}
-
-// 6. Admin 권한 확인
-async function checkAdminStatus(main, walletAddress) {
-    try {
-        const isAdmin = await main.admins(walletAddress);
-        return isAdmin;
-    } catch (error) {
-        throw new Error(`Admin 권한 확인 실패: ${error.message}`);
-    }
-}
-
 // 7. 라운드 종료 가능 시간 확인
 async function checkCloseTicketAvailability(main, roundId) {
     try {
-        const roundInfo = await getRoundInfo(main, roundId);
-        const startedAt = roundInfo.startedAt;
-        const currentTime = Math.floor(Date.now() / 1000);
+        // Main.sol의 getRemainTimeCloseTicketRound 함수 호출
+        const remainTime = await main.getRemainTimeCloseTicketRound();
+        // 0xffffffff는 status가 맞지 않다는 뜻
+        if (remainTime === 0xffffffffn) {
+            return {
+                remainTime: remainTime.toString(),
+                isAvailable: false,
+                reason: "Status is not Proceeding"
+            };
+        }
         
-        // Types.ROUND_CLOSETICKET_AVAIL_TIME은 23시간 (82800초)
-        const ROUND_CLOSETICKET_AVAIL_TIME = 82800;
-        const startedTimeEstimated = startedAt % 86400; // 1일 = 86400초
-        const availAt = startedTimeEstimated + ROUND_CLOSETICKET_AVAIL_TIME;
+        // 0이면 호출 가능, 0이 아닌 값은 아직 시간이 덜 됨
+        const isAvailable = remainTime === 0n;
         
         return {
-            currentTime,
-            startedAt: startedTimeEstimated,
-            availAt,
-            isAvailable: currentTime - startedTimeEstimated >= ROUND_CLOSETICKET_AVAIL_TIME
+            remainTime: remainTime.toString(),
+            isAvailable: isAvailable,
+            reason: isAvailable ? "Ready to close" : "Time not elapsed yet"
         };
     } catch (error) {
         throw new Error(`라운드 종료 가능 시간 확인 실패: ${error.message}`);
@@ -122,11 +102,11 @@ async function executeCloseTicketRound(main, wallet) {
 }
 
 // 9. 결과 포맷팅
-function formatCloseTicketRoundResult(wallet, closeTicketTx, roundId, contractStatus) {
+function formatCloseTicketRoundResult(wallet, closeTicketTx, receipt, roundId, contractStatus) {
     return {
         closer: wallet.address,
         transactionHash: closeTicketTx.hash,
-        blockNumber: closeTicketTx.receipt.blockNumber,
+        blockNumber: receipt.blockNumber,
         roundId: roundId.toString(),
         closeTime: new Date().toISOString(),
         contractStatus: contractStatus
@@ -170,20 +150,14 @@ async function closeTicketRound(mainAddress, customProvider = null, customWallet
         // 4. 라운드 상태 확인
         const roundStatus = await getRoundStatus(main, roundId);
         
-        // 5. Admin 권한 확인
-        const isAdmin = await checkAdminStatus(main, wallet.address);
-        
-        // 6. Agent NFT 보유량 확인
-        const agentBalance = await checkAgentOwnership(main, wallet.address, roundId);
-        
         // 7. 라운드 종료 가능 시간 확인
         const availability = await checkCloseTicketAvailability(main, roundId);
         
         // 8. closeTicketRound 실행
-        const { transaction: closeTicketTx } = await executeCloseTicketRound(main, wallet);
+        const { transaction: closeTicketTx, receipt } = await executeCloseTicketRound(main, wallet);
 
         // 9. 결과 포맷팅
-        const result = formatCloseTicketRoundResult(wallet, closeTicketTx, roundId, contractStatus);
+        const result = formatCloseTicketRoundResult(wallet, closeTicketTx, receipt, roundId, contractStatus);
 
         return result;
 
@@ -273,8 +247,6 @@ module.exports = {
     getContractStatus,
     getRoundStatus,
     getRoundInfo,
-    checkAgentOwnership,
-    checkAdminStatus,
     checkCloseTicketAvailability,
     executeCloseTicketRound,
     formatCloseTicketRoundResult,

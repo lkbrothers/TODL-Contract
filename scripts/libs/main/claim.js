@@ -125,11 +125,11 @@ async function executeClaim(main, wallet, roundId, agentId) {
 }
 
 // 9. 결과 포맷팅
-function formatClaimResult(wallet, claimTx, roundId, agentId, contractStatus) {
+function formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractStatus) {
     return {
         claimer: wallet.address,
         transactionHash: claimTx.hash,
-        blockNumber: claimTx.receipt.blockNumber,
+        blockNumber: receipt.blockNumber,
         roundId: roundId.toString(),
         agentId: agentId.toString(),
         claimTime: new Date().toISOString(),
@@ -182,10 +182,10 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
         const settleInfo = await getRoundSettleInfo(main, roundId);
         
         // 9. claim 실행
-        const { transaction: claimTx } = await executeClaim(main, wallet, roundId, agentId);
+        const { transaction: claimTx, receipt } = await executeClaim(main, wallet, roundId, agentId);
 
         // 10. 결과 포맷팅
-        const result = formatClaimResult(wallet, claimTx, roundId, agentId, contractStatus);
+        const result = formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractStatus);
 
         return result;
 
@@ -263,7 +263,7 @@ function logClaimResult(result) {
     console.log("  - 수령 시간:", result.claimTime);
 }
 
-function logClaimProcess(mainAddress, wallet, roundId, agentId, roundStatus, ownership, agentInfo, winnerInfo, settleInfo, claimTx) {
+function logClaimProcess(mainAddress, wallet, roundId, agentId, roundStatus, ownership, agentInfo, winnerInfo, settleInfo, claimTx, receipt) {
     console.log("🌐 Provider URL:", wallet.provider.connection.url);
     console.log("🎯 Main 컨트랙트 claim을 시작합니다...");
     console.log("🎯 Main 컨트랙트 주소:", mainAddress);
@@ -275,7 +275,7 @@ function logClaimProcess(mainAddress, wallet, roundId, agentId, roundStatus, own
     console.log("🏆 당첨 해시:", winnerInfo.winningHash);
     console.log("💰 당첨자별 상금:", ethers.formatEther(settleInfo.prizePerWinner));
     console.log("✅ claim 완료! 트랜잭션 해시:", claimTx.hash);
-    console.log("📦 블록 번호:", claimTx.receipt.blockNumber);
+    console.log("📦 블록 번호:", receipt.blockNumber);
 }
 
 // 모듈로 export

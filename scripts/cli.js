@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const ethers = require('ethers')
 require('dotenv').config();
 
 // 모듈 import
@@ -56,6 +57,16 @@ const {
     logRefundProcess 
 } = require('./libs/main/refund');
 
+const { startRound } = require('./libs/main/startRound');
+const { settleRound } = require('./libs/main/settleRound');
+
+const { 
+    faucet, 
+    logContractStatus: logSttContractStatus, 
+    logTransferResult, 
+    logTransferProcess 
+} = require('./libs/stt/faucet');
+
 async function main() {
     const args = process.argv.slice(2);
     
@@ -67,13 +78,17 @@ async function main() {
         console.error("  main:closeTicketRound");
         console.error("  main:claim <round_id> <agent_id>");
         console.error("  main:refund <round_id> <agent_id>");
-        console.error("");
+        console.error("  main:startRound");
+        console.error("  main:settleRound <round_id>");
+        console.error("  stt:faucet <to_address> <amount_in_ether>");
         console.error("예시:");
         console.error("  node cli.js itemParts:mint");
         console.error("  node cli.js main:buyAgent 1 2 3 4 5");
         console.error("  node cli.js main:closeTicketRound");
         console.error("  node cli.js main:claim 1 5");
         console.error("  node cli.js main:refund 1 5");
+        console.error("  node cli.js main:startRound");
+        console.error("  node cli.js main:settleRound 1");
         process.exit(1);
     }
 
@@ -117,7 +132,7 @@ async function main() {
                     } 
                 }, result.remainingMints, { 
                     hash: result.transactionHash 
-                }, result.totalSupply, result.remainingMints
+                }, result.blockNumber, result.totalSupply, result.remainingMints
             );
             logMintedTokens(result.mintedTokens);
             logMintingResult(result);
@@ -227,6 +242,98 @@ async function main() {
             
             console.log("✅ main:refund 액션이 완료되었습니다.");
 
+        } else if (action === 'main:startRound') {
+            const mainAddress = deploymentInfo.contracts.main;
+
+            if (!mainAddress) {
+                console.error("❌ deployment-info.json에서 main 주소를 찾을 수 없습니다.");
+                process.exit(1);
+            }
+
+            console.log("🎯 Main 컨트랙트 주소:", mainAddress);
+
+            const result = await startRound(mainAddress);
+            
+            // 결과 출력
+            console.log("✅ startRound 완료:");
+            console.log("  - 라운드 ID:", result.roundId);
+            console.log("  - 랜덤 시드:", result.randSeed);
+            console.log("  - 라운드 상태:", result.roundStatus);
+            console.log("  - 트랜잭션 해시:", result.transaction.hash);
+            
+            console.log("✅ main:startRound 액션이 완료되었습니다.");
+
+        } else if (action === 'main:settleRound') {
+            const mainAddress = deploymentInfo.contracts.main;
+
+            if (!mainAddress) {
+                console.error("❌ deployment-info.json에서 main 주소를 찾을 수 없습니다.");
+                process.exit(1);
+            }
+
+            if (actionArgs.length !== 2) {
+                console.error("❌ settleRound는 라운드 ID와 startRound때 생성한 랜덤시드가 필요합니다.");
+                console.error("사용법: node cli.js main:settleRound <round_id> <randomSeed>");
+                process.exit(1);
+            }
+
+            const roundId = parseInt(actionArgs[0]);
+            const randSeed = actionArgs[1];
+
+            console.log("🎯 Main 컨트랙트 주소:", mainAddress);
+            console.log("🎯 라운드 ID:", roundId);
+            console.log("🎯 랜덤시드", randSeed);
+
+
+            const result = await settleRound(mainAddress, roundId, randSeed);
+            
+            // 결과 출력
+            console.log("✅ settleRound 완료:");
+            console.log("  - 라운드 ID:", result.roundId);
+            console.log("  - 랜덤 시드:", result.randSeed);
+            console.log("  - 이전 상태:", result.previousStatus);
+            console.log("  - 새로운 상태:", result.newStatus);
+            console.log("  - 트랜잭션 해시:", result.transaction.hash);
+            console.log("  - 정산 정보:");
+            console.log("    - 총 입금액:", result.settleInfo.depositedAmount.toString());
+            console.log("    - 총 상금:", result.settleInfo.totalPrizePayout.toString());
+            console.log("    - 당첨자별 상금:", result.settleInfo.prizePerWinner.toString());
+            console.log("    - 기부금:", result.settleInfo.donateAmount.toString());
+            console.log("    - 투자금:", result.settleInfo.corporateAmount.toString());
+            console.log("    - 운영비:", result.settleInfo.operationAmount.toString());
+            console.log("    - 스테이킹:", result.settleInfo.stakedAmount.toString());
+            
+            console.log("✅ main:settleRound 액션이 완료되었습니다.");
+
+        } else if (action === 'stt:faucet') {
+            const sttAddress = deploymentInfo.contracts.sttToken;
+
+            if (!sttAddress) {
+                console.error("❌ deployment-info.json에서 sttToken 주소를 찾을 수 없습니다.");
+                process.exit(1);
+            }
+
+            if (actionArgs.length !== 2) {
+                console.error("❌ faucet은 수신자 주소와 전송량이 필요합니다.");
+                console.error("사용법: node cli.js stt:faucet <to_address> <amount_in_ether>");
+                process.exit(1);
+            }
+
+            const to = actionArgs[0];
+            const amount = ethers.parseEther(actionArgs[1]);
+
+            console.log("🎯 STT 컨트랙트 주소:", sttAddress);
+            console.log("🎯 수신자 주소:", to);
+            console.log("💰 전송량:", actionArgs[1], "STT");
+
+            const result = await faucet(sttAddress, to, amount);
+            
+            // 결과 로깅
+            logSttContractStatus(result.contractStatus);
+            logTransferResult(result);
+            
+            console.log("✅ stt:faucet 액션이 완료되었습니다.");
+
         } else {
             console.error("❌ 지원하지 않는 액션입니다:", action);
             console.error("지원하는 액션:");
@@ -235,6 +342,9 @@ async function main() {
             console.error("  main:closeTicketRound");
             console.error("  main:claim <round_id> <agent_id>");
             console.error("  main:refund <round_id> <agent_id>");
+            console.error("  main:startRound");
+            console.error("  main:settleRound <round_id>");
+            console.error("  stt:faucet <to_address> <amount_in_ether>");
             process.exit(1);
         }
 
