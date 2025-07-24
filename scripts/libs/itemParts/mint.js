@@ -140,10 +140,10 @@ async function mintItemParts(itemPartsAddress, customProvider = null, customWall
         
         // 4. 민팅 전 상태 확인
         const remainingBefore = await checkMintingStatus(itemParts, wallet.address);
-console.log('1111')
+
         // 5. 민팅 실행
         const { transaction: mintTx, receipt } = await executeMinting(itemParts, wallet);
-console.log('2222')
+
         // 6. 민팅 후 상태 확인
         const totalSupplyAfter = await itemParts.totalSupply();
         const remainingAfter = await checkMintingStatus(itemParts, wallet.address);

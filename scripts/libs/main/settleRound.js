@@ -67,6 +67,9 @@ async function settleRound(mainAddress, roundId, randSeed, customProvider = null
         // 7. 라운드 정산 정보 확인
         const settleInfo = await main.roundSettleManageInfo(roundId);
 
+        // 8. 라운드 당첨 정보 확인
+        const winnerInfo = await main.roundWinnerManageInfo(roundId);
+
         return {
             success: true,
             roundId: roundId.toString(),
@@ -74,7 +77,8 @@ async function settleRound(mainAddress, roundId, randSeed, customProvider = null
             transaction: result.transaction,
             previousStatus: getStatusName(roundStatus),
             newStatus: getStatusName(newRoundStatus),
-            settleInfo: settleInfo
+            settleInfo: settleInfo,
+            winnerInfo: winnerInfo
         };
 
     } catch (error) {
