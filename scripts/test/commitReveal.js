@@ -6,7 +6,7 @@ async function main() {
 
     // 환경변수 확인
     const adminKey = process.env.ADMIN_KEY;
-    const privateKey = process.env.PRIVATE_KEY;
+    const privateKey = process.env.MARKER_KEY;
     const providerUrl = process.env.PROVIDER_URL;
 
     if (!adminKey || !privateKey || !providerUrl) {

@@ -102,7 +102,6 @@ library Types {
     // def. CONSTANT
     uint64  public constant ROUND_PERIOD = 86400; // 라운드주기: 1일
     uint64  public constant ROUND_CLOSETICKET_AVAIL_TIME = 82800; // 라운드종료시점 (UTC23:00)
-    uint64  public constant ROUND_SETTLE_AVAIL_TIME = 86400; // 라운드정산시점 (UTC24:00)
     uint64  public constant ROUND_REFUND_AVAIL_TIME = ROUND_PERIOD * 2; // 환불가능시점 (2일)
     uint64  public constant ROUND_PAYOUT_LIMIT_TIME = 30 days; // 클레임 혹은 환불을 수행할 수 있는 기간 (30일)
     uint256 public constant AGENT_MINTING_FEE = 1 ether; // Agent 민팅비: 1 STT

@@ -25,7 +25,7 @@ module.exports = {
     hardhat: {
       loggingEnabled: false
     },
-    development: {
+    localhost: {
       url: process.env.PROVIDER_URL,
       accounts: [process.env.PRIVATE_KEY]
     },
