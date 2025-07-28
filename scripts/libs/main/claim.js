@@ -59,13 +59,8 @@ async function getRoundStatus(main, roundId) {
 async function checkAgentOwnership(main, walletAddress, agentId, provider) {
     try {
         const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
-        console.log('>>>>>>>', agentAddress)
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
         const agent = new Contract(agentAddress, abi, provider);
-        console.log(await agent.totalSupply())
-        console.log(await agent.ownerOf(1))
-        console.log(await agent.ownerOf(2))
-        console.log(await agent.ownerOf(3))
         // Agent NFT 존재 여부 확인
         let exists = false;
         try {
