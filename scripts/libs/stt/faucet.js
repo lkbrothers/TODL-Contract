@@ -1,7 +1,17 @@
+/**
+ * @file faucet.js
+ * @notice STT 토큰 faucet 관련 Library
+ * @author hlibbc
+ */
 const { Contract, JsonRpcProvider, Wallet, ethers } = require("ethers");
 require('dotenv').config();
 
-// 1. Provider 및 Contract 초기화
+/**
+ * @notice STT 컨트랙트를 초기화한다.
+ * @param {*} sttAddress STT 컨트랙트 주소
+ * @param {*} provider Provider 객체
+ * @returns STT 컨트랙트 인스턴스
+ */
 async function initializeContracts(sttAddress, provider) {
     try {
         const abi = require("../../../artifacts/contracts/SttPermit.sol/SttPermit.json").abi;
@@ -12,7 +22,12 @@ async function initializeContracts(sttAddress, provider) {
     }
 }
 
-// 2. STT 잔액 확인
+/**
+ * @notice STT 토큰 잔액을 확인한다.
+ * @param {*} stt STT 컨트랙트 인스턴스
+ * @param {*} address 주소
+ * @returns STT 토큰 잔액
+ */
 async function getSttBalance(stt, address) {
     try {
         const balance = await stt.balanceOf(address);
@@ -22,7 +37,14 @@ async function getSttBalance(stt, address) {
     }
 }
 
-// 3. STT 전송 실행
+/**
+ * @notice STT 토큰 전송을 실행한다.
+ * @param {*} stt STT 컨트랙트 인스턴스
+ * @param {*} wallet 전송자 지갑
+ * @param {*} to 수신자 주소
+ * @param {*} amount 전송량
+ * @returns 트랜잭션 정보 (transaction, receipt)
+ */
 async function executeTransfer(stt, wallet, to, amount) {
     try {
         const transferTx = await stt.connect(wallet).transfer(to, amount);
@@ -33,7 +55,16 @@ async function executeTransfer(stt, wallet, to, amount) {
     }
 }
 
-// 4. 결과 포맷팅
+/**
+ * @notice STT 전송 결과를 포맷팅한다.
+ * @param {*} wallet 전송자 지갑
+ * @param {*} transferTx 전송 트랜잭션
+ * @param {*} receipt 트랜잭션 영수증
+ * @param {*} to 수신자 주소
+ * @param {*} amount 전송량
+ * @param {*} contractStatus 컨트랙트 상태 정보
+ * @returns 포맷팅된 전송 결과
+ */
 function formatTransferResult(wallet, transferTx, receipt, to, amount, contractStatus) {
     return {
         sender: wallet.address,
@@ -46,7 +77,15 @@ function formatTransferResult(wallet, transferTx, receipt, to, amount, contractS
     };
 }
 
-// 메인 faucet 함수 (순수 함수)
+/**
+ * @notice STT 토큰을 전송한다.
+ * @param {*} sttAddress STT 컨트랙트 주소
+ * @param {*} to 수신자 주소
+ * @param {*} amount 전송량
+ * @param {*} customProvider 커스텀 Provider (optional)
+ * @param {*} customWallet 커스텀 Wallet (optional)
+ * @returns STT 전송 결과
+ */
 async function faucet(sttAddress, to, amount, customProvider = null, customWallet = null) {
     try {
         // 1. Provider 및 Wallet 설정
@@ -102,48 +141,24 @@ async function faucet(sttAddress, to, amount, customProvider = null, customWalle
     }
 }
 
-// 로깅 함수들 (별도로 사용)
-function logContractStatus(status) {
-    console.log("\n📊 STT 토큰 상태:");
-    console.log("  - 전송자 잔액:", ethers.formatEther(status.senderBalance), "STT");
-    console.log("  - 수신자 잔액 (전송 전):", ethers.formatEther(status.recipientBalanceBefore), "STT");
-    console.log("  - 수신자 잔액 (전송 후):", ethers.formatEther(status.recipientBalanceAfter), "STT");
-    console.log("  - STT 컨트랙트 주소:", status.sttAddress);
-}
-
-function logTransferResult(result) {
-    console.log("\n📋 STT 전송 결과 요약:");
+/**
+ * @notice faucet 결과를 출력한다.
+ * @param {*} result faucet 결과물
+ */
+function logResult(result) {
+    console.log("\n📋 Faucet Reports:");
     console.log("  - 전송자:", result.sender);
     console.log("  - 수신자:", result.recipient);
-    console.log("  - 전송량:", ethers.formatEther(result.amount), "STT");
     console.log("  - 트랜잭션 해시:", result.transactionHash);
     console.log("  - 블록 번호:", result.blockNumber);
+    console.log("  - 전송량:", ethers.formatEther(result.amount), "STT");
     console.log("  - 전송 시간:", result.transferTime);
-}
-
-function logTransferProcess(sttAddress, wallet, to, amount, senderBalance, recipientBalanceBefore, transferTx, receipt) {
-    console.log("🌐 Provider URL:", wallet.provider.connection.url);
-    console.log("💰 STT 토큰 전송을 시작합니다...");
-    console.log("🎯 STT 컨트랙트 주소:", sttAddress);
-    console.log("🎨 전송자 주소:", wallet.address);
-    console.log("🎯 수신자 주소:", to);
-    console.log("💰 전송량:", ethers.formatEther(amount), "STT");
-    console.log("📊 전송자 잔액:", ethers.formatEther(senderBalance), "STT");
-    console.log("📊 수신자 잔액 (전송 전):", ethers.formatEther(recipientBalanceBefore), "STT");
-    console.log("✅ STT 전송 완료! 트랜잭션 해시:", transferTx.hash);
-    console.log("📦 블록 번호:", receipt.blockNumber);
 }
 
 // 모듈로 export
 module.exports = { 
     faucet,
-    initializeContracts,
-    getSttBalance,
-    executeTransfer,
-    formatTransferResult,
-    logContractStatus,
-    logTransferResult,
-    logTransferProcess
+    logResult
 };
 
 // 직접 실행 시 (테스트용)

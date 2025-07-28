@@ -1,4 +1,9 @@
-const { Contract, JsonRpcProvider, Wallet, ethers } = require("ethers");
+/**
+ * @file refund.js
+ * @notice Main 컨트랙트 refund 관련 Library
+ * @author hlibbc
+ */
+const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
@@ -12,7 +17,12 @@ async function initializeContracts(mainAddress, provider) {
     }
 }
 
-// 2. 컨트랙트 상태 확인
+/**
+ * @notice Main 컨트랙트의 주요정보를 반환한다.
+ * @dev 주요정보는 다음과 같다. (roundId, donateAddr, corporateAddr, operationAddr)
+ * @param {*} main Main 컨트랙트 주소
+ * @returns status (Main 컨트랙트의 주요정보)
+ */
 async function getContractStatus(main) {
     const status = {};
     
@@ -43,7 +53,12 @@ async function getContractStatus(main) {
     return status;
 }
 
-// 3. 라운드 상태 확인
+/**
+ * @notice 특정 라운드의 상태를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 상태 (0: NotStarted, 1: Proceeding, 2: Drawing, 3: Claiming, 4: Refunding, 5: Ended)
+ */
 async function getRoundStatus(main, roundId) {
     try {
         const status = await main.getRoundStatus(roundId);
@@ -53,10 +68,16 @@ async function getRoundStatus(main, roundId) {
     }
 }
 
-// 4. Agent NFT 소유권 확인
+/**
+ * @notice Agent NFT의 소유권을 확인한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} walletAddress 확인할 지갑 주소
+ * @param {*} agentId 확인할 Agent ID
+ * @returns 소유권 정보 (owner, isOwner, agentAddress)
+ */
 async function checkAgentOwnership(main, walletAddress, agentId) {
     try {
-        const agentAddress = await main.managedContracts(0); // Agent는 0번 인덱스
+        const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
         const agent = new Contract(agentAddress, abi, main.provider);
         
@@ -73,10 +94,15 @@ async function checkAgentOwnership(main, walletAddress, agentId) {
     }
 }
 
-// 5. Agent NFT 정보 확인
+/**
+ * @notice Agent NFT의 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} agentId 확인할 Agent ID
+ * @returns Agent 정보 (roundId, typeHash, agentAddress)
+ */
 async function getAgentInfo(main, agentId) {
     try {
-        const agentAddress = await main.managedContracts(0); // Agent는 0번 인덱스
+        const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
         const agent = new Contract(agentAddress, abi, main.provider);
         
@@ -93,7 +119,12 @@ async function getAgentInfo(main, agentId) {
     }
 }
 
-// 6. 라운드 정보 확인
+/**
+ * @notice 라운드의 상세 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 상세 정보
+ */
 async function getRoundInfo(main, roundId) {
     try {
         const roundInfo = await main.roundStatusManageInfo(roundId);
@@ -103,7 +134,12 @@ async function getRoundInfo(main, roundId) {
     }
 }
 
-// 7. 라운드 정산 정보 확인
+/**
+ * @notice 라운드의 정산 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 정산 정보 (depositedAmount, refundedAmount)
+ */
 async function getRoundSettleInfo(main, roundId) {
     try {
         const settleInfo = await main.roundSettleManageInfo(roundId);
@@ -113,7 +149,12 @@ async function getRoundSettleInfo(main, roundId) {
     }
 }
 
-// 8. 환불 가능 시간 확인
+/**
+ * @notice 환불 가능 여부를 확인한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 환불 가능 여부 (currentTime, startedAt, timeElapsed, isAvailable)
+ */
 async function checkRefundAvailability(main, roundId) {
     try {
         const roundInfo = await getRoundInfo(main, roundId);
@@ -135,7 +176,14 @@ async function checkRefundAvailability(main, roundId) {
     }
 }
 
-// 9. refund 실행
+/**
+ * @notice refund 트랜잭션을 실행한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} wallet 환불자 지갑
+ * @param {*} roundId 라운드 ID
+ * @param {*} agentId Agent ID
+ * @returns 트랜잭션 정보 (transaction, receipt)
+ */
 async function executeRefund(main, wallet, roundId, agentId) {
     try {
         const refundTx = await main.connect(wallet).refund(roundId, agentId);
@@ -146,7 +194,16 @@ async function executeRefund(main, wallet, roundId, agentId) {
     }
 }
 
-// 10. 결과 포맷팅
+/**
+ * @notice refund 결과를 포맷팅한다.
+ * @param {*} wallet 환불자 지갑
+ * @param {*} refundTx refund 트랜잭션
+ * @param {*} receipt 트랜잭션 영수증
+ * @param {*} roundId 라운드 ID
+ * @param {*} agentId Agent ID
+ * @param {*} contractStatus 컨트랙트 상태
+ * @returns 포맷팅된 refund 결과
+ */
 function formatRefundResult(wallet, refundTx, receipt, roundId, agentId, contractStatus) {
     return {
         refunder: wallet.address,
@@ -220,117 +277,24 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
 }
 
 // 로깅 함수들 (별도로 사용)
-function logContractStatus(status) {
-    console.log("\n📊 현재 컨트랙트 상태:");
-    if (status.roundId !== null) {
-        console.log("  - 현재 라운드 ID:", status.roundId.toString());
-    } else {
-        console.log("  - 현재 라운드 ID: 확인 불가");
-    }
-    
-    if (status.donateAddr !== null) {
-        console.log("  - 기부 주소:", status.donateAddr);
-    } else {
-        console.log("  - 기부 주소: 확인 불가");
-    }
-    
-    if (status.corporateAddr !== null) {
-        console.log("  - 영리법인 주소:", status.corporateAddr);
-    } else {
-        console.log("  - 영리법인 주소: 확인 불가");
-    }
-    
-    if (status.operationAddr !== null) {
-        console.log("  - 운영비 주소:", status.operationAddr);
-    } else {
-        console.log("  - 운영비 주소: 확인 불가");
-    }
-}
-
-function logRoundStatus(roundStatus) {
-    console.log("\n🎯 라운드 상태:");
-    const statusNames = ["NotStarted", "Proceeding", "Drawing", "Claiming", "Refunding", "Ended"];
-    console.log("  - 상태:", statusNames[roundStatus] || "Unknown");
-}
-
-function logAgentOwnership(ownership) {
-    console.log("\n🎨 Agent NFT 소유권:");
-    console.log("  - 소유자:", ownership.owner);
-    console.log("  - 호출자 소유 여부:", ownership.isOwner ? "✅ 소유" : "❌ 미소유");
-}
-
-function logAgentInfo(agentInfo) {
-    console.log("\n🎨 Agent NFT 정보:");
-    console.log("  - 라운드 ID:", agentInfo.roundId.toString());
-    console.log("  - 타입 해시:", agentInfo.typeHash);
-}
-
-function logRoundInfo(roundInfo) {
-    console.log("\n🎯 라운드 정보:");
-    console.log("  - 시작 시간:", new Date(roundInfo.startedAt * 1000).toISOString());
-    console.log("  - 종료 시간:", roundInfo.endedAt ? new Date(roundInfo.endedAt * 1000).toISOString() : "미종료");
-}
-
-function logSettleInfo(settleInfo) {
-    console.log("\n💰 라운드 정산 정보:");
-    console.log("  - 총 모금액:", ethers.formatEther(settleInfo.depositedAmount));
-    console.log("  - 환불된 금액:", ethers.formatEther(settleInfo.refundedAmount));
-}
-
-function logAvailability(availability) {
-    console.log("\n⏰ 환불 가능 시간:");
-    console.log("  - 현재 시간:", availability.currentTime);
-    console.log("  - 라운드 시작 시간:", availability.startedAt);
-    console.log("  - 경과 시간:", availability.timeElapsed);
-    console.log("  - 환불 가능 여부:", availability.isAvailable ? "✅ 가능" : "❌ 불가능");
-}
-
-function logRefundResult(result) {
-    console.log("\n📋 refund 결과 요약:");
+/**
+ * @notice refund 결과를 출력한다.
+ * @param {*} result refund 결과물
+ */
+function logResult(result) {
+    console.log("\n📋 Refund Reports:");
     console.log("  - 환불자:", result.refunder);
     console.log("  - 트랜잭션 해시:", result.transactionHash);
+    console.log("  - 블록 번호:", result.blockNumber);
     console.log("  - 라운드 ID:", result.roundId);
     console.log("  - Agent ID:", result.agentId);
     console.log("  - 환불 시간:", result.refundTime);
 }
 
-function logRefundProcess(mainAddress, wallet, roundId, agentId, roundStatus, ownership, agentInfo, roundInfo, settleInfo, availability, refundTx, receipt) {
-    console.log("🌐 Provider URL:", wallet.provider.connection.url);
-    console.log("🎯 Main 컨트랙트 refund를 시작합니다...");
-    console.log("🎯 Main 컨트랙트 주소:", mainAddress);
-    console.log("🎨 환불자 주소:", wallet.address);
-    console.log("🎯 라운드 ID:", roundId);
-    console.log("🎨 Agent ID:", agentId);
-    console.log("📊 라운드 상태:", roundStatus);
-    console.log("🎨 Agent 소유자:", ownership.owner);
-    console.log("💰 총 모금액:", ethers.formatEther(settleInfo.depositedAmount));
-    console.log("⏰ 환불 가능 여부:", availability.isAvailable ? "가능" : "불가능");
-    console.log("✅ refund 완료! 트랜잭션 해시:", refundTx.hash);
-    console.log("📦 블록 번호:", receipt.blockNumber);
-}
-
 // 모듈로 export
 module.exports = { 
     refund,
-    initializeContracts,
-    getContractStatus,
-    getRoundStatus,
-    checkAgentOwnership,
-    getAgentInfo,
-    getRoundInfo,
-    getRoundSettleInfo,
-    checkRefundAvailability,
-    executeRefund,
-    formatRefundResult,
-    logContractStatus,
-    logRoundStatus,
-    logAgentOwnership,
-    logAgentInfo,
-    logRoundInfo,
-    logSettleInfo,
-    logAvailability,
-    logRefundResult,
-    logRefundProcess
+    logResult
 };
 
 // 직접 실행 시 (테스트용)

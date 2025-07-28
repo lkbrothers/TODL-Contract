@@ -6,65 +6,36 @@ require('dotenv').config();
 // 모듈 import
 const { 
     mintItemParts, 
-    logContractStatus, 
-    logMintedTokens, 
-    logMintingResult, 
-    logMintingProcess 
+    logResult: logItemPartsMintResult
 } = require('./libs/itemParts/mint');
 
 const { 
     buyAgent, 
-    logContractStatus: logMainContractStatus, 
-    logRoundStatus, 
-    logOwnershipChecks, 
-    logBuyAgentResult, 
-    logBuyAgentProcess 
+    logResult: logBuyAgentResult
 } = require('./libs/main/buyAgent');
 
 const { 
     closeTicketRound, 
-    logContractStatus: logMainContractStatus2, 
-    logRoundStatus: logRoundStatus2, 
-    logAdminStatus, 
-    logAgentOwnership, 
-    logAvailability, 
-    logCloseTicketRoundResult, 
-    logCloseTicketRoundProcess 
+    logResult: logCloseTicketRoundResult
 } = require('./libs/main/closeTicketRound');
 
 const { 
     claim, 
-    logContractStatus: logMainContractStatus3, 
-    logRoundStatus: logRoundStatus3, 
-    logAgentOwnership: logAgentOwnership2, 
-    logAgentInfo, 
-    logWinnerInfo, 
-    logSettleInfo, 
-    logClaimResult, 
-    logClaimProcess 
+    logResult: logClaimResult
 } = require('./libs/main/claim');
 
 const { 
     refund, 
-    logContractStatus: logMainContractStatus4, 
-    logRoundStatus: logRoundStatus4, 
-    logAgentOwnership: logAgentOwnership3, 
-    logAgentInfo: logAgentInfo2, 
-    logRoundInfo, 
-    logSettleInfo: logSettleInfo2, 
-    logAvailability: logAvailability2, 
-    logRefundResult, 
-    logRefundProcess 
+    logResult: logRefundResult
 } = require('./libs/main/refund');
 
 const { startRound } = require('./libs/main/startRound');
 const { settleRound } = require('./libs/main/settleRound');
+const { settleRoundForced } = require('./libs/main/settleRounForced');
 
 const { 
-    faucet, 
-    logContractStatus: logSttContractStatus, 
-    logTransferResult, 
-    logTransferProcess 
+    faucet,
+    logResult: logFaucetResult
 } = require('./libs/stt/faucet');
 
 const { 
@@ -87,7 +58,8 @@ async function main() {
         console.error("  main:claim <round_id> <agent_id>");
         console.error("  main:refund <round_id> <agent_id>");
         console.error("  main:startRound");
-        console.error("  main:settleRound <round_id> <randSeed>");
+        console.error("  main:settleRound <randSeed>");
+        console.error("  main:settleRoundForced <winnerHash>");
         console.error("  main:roundInfo");
         console.error("  stt:faucet <to_address> <amount_in_ether>");
         console.error("예시:");
@@ -97,7 +69,8 @@ async function main() {
         console.error("  node cli.js main:claim 1 5");
         console.error("  node cli.js main:refund 1 5");
         console.error("  node cli.js main:startRound");
-        console.error("  node cli.js main:settleRound 1 1234567890");
+        console.error("  node cli.js main:settleRound 1234567890");
+        console.error("  node cli.js main:settleRoundForced 0x1234567890abcdef...");
         process.exit(1);
     }
 
@@ -131,21 +104,7 @@ async function main() {
             const result = await mintItemParts(itemPartsAddress);
             
             // 결과 로깅
-            logContractStatus(result.contractStatus);
-            logMintingProcess(itemPartsAddress, {
-                    address: result.minter, 
-                    provider: { 
-                        connection: { 
-                            url: process.env.PROVIDER_URL || "http://localhost:8545" 
-                        } 
-                    } 
-                }, result.remainingMints, { 
-                    hash: result.transactionHash 
-                }, result.blockNumber, result.totalSupply, result.remainingMints
-            );
-            logMintedTokens(result.mintedTokens);
-            logMintingResult(result);
-            
+            logItemPartsMintResult(result);
             console.log("✅ itemParts:mint 액션이 완료되었습니다.");
 
         } else if (action === 'main:buyAgent') {
@@ -170,7 +129,6 @@ async function main() {
             const result = await buyAgent(mainAddress, itemPartsIds);
             
             // 결과 로깅
-            logMainContractStatus(result.contractStatus);
             logBuyAgentResult(result);
             
             console.log("✅ main:buyAgent 액션이 완료되었습니다.");
@@ -188,7 +146,6 @@ async function main() {
             const result = await closeTicketRound(mainAddress);
             
             // 결과 로깅
-            logMainContractStatus2(result.contractStatus);
             logCloseTicketRoundResult(result);
             
             console.log("✅ main:closeTicketRound 액션이 완료되었습니다.");
@@ -217,7 +174,6 @@ async function main() {
             const result = await claim(mainAddress, roundId, agentId);
             
             // 결과 로깅
-            logMainContractStatus3(result.contractStatus);
             logClaimResult(result);
             
             console.log("✅ main:claim 액션이 완료되었습니다.");
@@ -252,6 +208,7 @@ async function main() {
             console.log("✅ main:refund 액션이 완료되었습니다.");
 
         } else if (action === 'main:startRound') {
+            console.log("❌❌❌❌❌❌❌❌❌ 본 Command는 admin 전용입니당!");
             const mainAddress = deploymentInfo.contracts.main;
 
             if (!mainAddress) {
@@ -273,6 +230,7 @@ async function main() {
             console.log("✅ main:startRound 액션이 완료되었습니다.");
 
         } else if (action === 'main:settleRound') {
+            console.log("❌❌❌❌❌❌❌❌❌ 본 Command는 admin 전용입니당!");
             const mainAddress = deploymentInfo.contracts.main;
 
             if (!mainAddress) {
@@ -280,21 +238,18 @@ async function main() {
                 process.exit(1);
             }
 
-            if (actionArgs.length !== 2) {
-                console.error("❌ settleRound는 라운드 ID와 startRound때 생성한 랜덤시드가 필요합니다.");
-                console.error("사용법: node cli.js main:settleRound <round_id> <randomSeed>");
+            if (actionArgs.length !== 1) {
+                console.error("❌ settleRound는 startRound때 생성한 랜덤시드가 필요합니다.");
+                console.error("사용법: node cli.js main:settleRound <randomSeed>");
                 process.exit(1);
             }
 
-            const roundId = parseInt(actionArgs[0]);
-            const randSeed = actionArgs[1];
+            const randSeed = actionArgs[0];
 
             console.log("🎯 Main 컨트랙트 주소:", mainAddress);
-            console.log("🎯 라운드 ID:", roundId);
             console.log("🎯 랜덤시드", randSeed);
 
-
-            const result = await settleRound(mainAddress, roundId, randSeed);
+            const result = await settleRound(mainAddress, randSeed);
             
             // 결과 출력
             console.log("✅ settleRound 완료:");
@@ -316,6 +271,49 @@ async function main() {
             console.log("    - 스테이킹:", result.settleInfo.stakedAmount.toString());
             
             console.log("✅ main:settleRound 액션이 완료되었습니다.");
+
+        } else if (action === 'main:settleRoundForced') {
+            console.log("❌❌❌❌❌❌❌❌❌ 본 Command는 admin 전용입니당!");
+            const mainAddress = deploymentInfo.contracts.main;
+
+            if (!mainAddress) {
+                console.error("❌ deployment-info.json에서 main 주소를 찾을 수 없습니다.");
+                process.exit(1);
+            }
+
+            if (actionArgs.length !== 1) {
+                console.error("❌ settleRoundForced는 당첨 해시가 필요합니다.");
+                console.error("사용법: node cli.js main:settleRoundForced <winnerHash>");
+                process.exit(1);
+            }
+
+            const winnerHash = actionArgs[0];
+
+            console.log("🎯 Main 컨트랙트 주소:", mainAddress);
+            console.log("🎯 당첨 해시:", winnerHash);
+
+            const result = await settleRoundForced(mainAddress, winnerHash);
+            
+            // 결과 출력
+            console.log("✅ settleRoundForced 완료:");
+            console.log("  - 라운드 ID:", result.roundId);
+            console.log("  - 당첨 해시:", result.winnerHash);
+            console.log("  - 이전 상태:", result.previousStatus);
+            console.log("  - 새로운 상태:", result.newStatus);
+            console.log("  - 트랜잭션 해시:", result.transaction.hash);
+            console.log("  - 당첨 정보:");
+            console.log("    - 당첨 해시:", result.winnerInfo.winningHash);
+            console.log("    - 당첨자 수:", result.winnerInfo.winnerCount.toString());
+            console.log("  - 정산 정보:");
+            console.log("    - 총 입금액:", result.settleInfo.depositedAmount.toString());
+            console.log("    - 총 상금:", result.settleInfo.totalPrizePayout.toString());
+            console.log("    - 당첨자별 상금:", result.settleInfo.prizePerWinner.toString());
+            console.log("    - 기부금:", result.settleInfo.donateAmount.toString());
+            console.log("    - 투자금:", result.settleInfo.corporateAmount.toString());
+            console.log("    - 운영비:", result.settleInfo.operationAmount.toString());
+            console.log("    - 스테이킹:", result.settleInfo.stakedAmount.toString());
+            
+            console.log("✅ main:settleRoundForced 액션이 완료되었습니다.");
 
         } else if (action === 'main:roundInfo') {
             const mainAddress = deploymentInfo.contracts.main;
@@ -361,8 +359,7 @@ async function main() {
             const result = await faucet(sttAddress, to, amount);
             
             // 결과 로깅
-            logSttContractStatus(result.contractStatus);
-            logTransferResult(result);
+            logFaucetResult(result);
             
             console.log("✅ stt:faucet 액션이 완료되었습니다.");
 
@@ -376,6 +373,7 @@ async function main() {
             console.error("  main:refund <round_id> <agent_id>");
             console.error("  main:startRound");
             console.error("  main:settleRound <round_id>");
+            console.error("  main:settleRoundForced <round_id> <winnerHash>");
             console.error("  main:roundInfo");
             console.error("  stt:faucet <to_address> <amount_in_ether>");
             process.exit(1);

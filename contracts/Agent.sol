@@ -47,7 +47,7 @@ contract AgentNFT is ERC721URIStorage, Ownable {
     event Burned(uint256 indexed tokenId);
 
     // def. CONSTANT
-    string  public constant DEFAULT_BASE_URI = "http://test.sample.com/Agent/json/";
+    string  public constant DEFAULT_BASE_URI = "https://dev.todl.fun/api/file-download/json/";
     
     // def. VARIABLE
     address public mainAddr; /// Main 컨트랙트 주소

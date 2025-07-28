@@ -1,4 +1,9 @@
-const { Contract, JsonRpcProvider, Wallet, ethers } = require("ethers");
+/**
+ * @file claim.js
+ * @notice Main 컨트랙트 claim 관련 Library
+ * @author hlibbc
+ */
+const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
@@ -12,38 +17,28 @@ async function initializeContracts(mainAddress, provider) {
     }
 }
 
-// 2. 컨트랙트 상태 확인
-async function getContractStatus(main) {
-    const status = {};
+/**
+ * @notice Main 컨트랙트의 라운드번호를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @returns roundId
+ */
+async function getRoundId(main) {
+    let roundId;
     
     try {
-        status.roundId = await main.roundId();
+        roundId = await main.roundId();
     } catch (error) {
-        status.roundId = null;
+        roundId = null;
     }
-    
-    try {
-        status.donateAddr = await main.donateAddr();
-    } catch (error) {
-        status.donateAddr = null;
-    }
-    
-    try {
-        status.corporateAddr = await main.corporateAddr();
-    } catch (error) {
-        status.corporateAddr = null;
-    }
-    
-    try {
-        status.operationAddr = await main.operationAddr();
-    } catch (error) {
-        status.operationAddr = null;
-    }
-    
-    return status;
+    return roundId;
 }
 
-// 3. 라운드 상태 확인
+/**
+ * @notice 특정 라운드의 상태를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 상태 (0: NotStarted, 1: Proceeding, 2: Drawing, 3: Claiming, 4: Refunding, 5: Ended)
+ */
 async function getRoundStatus(main, roundId) {
     try {
         const status = await main.getRoundStatus(roundId);
@@ -53,12 +48,41 @@ async function getRoundStatus(main, roundId) {
     }
 }
 
-// 4. Agent NFT 소유권 확인
-async function checkAgentOwnership(main, walletAddress, agentId) {
+/**
+ * @notice Agent NFT의 소유권을 확인한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} walletAddress 확인할 지갑 주소
+ * @param {*} agentId 확인할 Agent ID
+ * @param {*} provider Provider 객체
+ * @returns 소유권 정보 (owner, isOwner, agentAddress, exists)
+ */
+async function checkAgentOwnership(main, walletAddress, agentId, provider) {
     try {
-        const agentAddress = await main.managedContracts(0); // Agent는 0번 인덱스
+        const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
+        console.log('>>>>>>>', agentAddress)
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, main.provider);
+        const agent = new Contract(agentAddress, abi, provider);
+        console.log(await agent.totalSupply())
+        console.log(await agent.ownerOf(1))
+        console.log(await agent.ownerOf(2))
+        console.log(await agent.ownerOf(3))
+        // Agent NFT 존재 여부 확인
+        let exists = false;
+        try {
+            await agent.ownerOf(agentId);
+            exists = true;
+        } catch (error) {
+            exists = false;
+        }
+        
+        if (!exists) {
+            return {
+                owner: null,
+                isOwner: false,
+                agentAddress,
+                exists: false
+            };
+        }
         
         const owner = await agent.ownerOf(agentId);
         const isOwner = owner.toLowerCase() === walletAddress.toLowerCase();
@@ -66,19 +90,26 @@ async function checkAgentOwnership(main, walletAddress, agentId) {
         return {
             owner,
             isOwner,
-            agentAddress
+            agentAddress,
+            exists: true
         };
     } catch (error) {
         throw new Error(`Agent 소유권 확인 실패: ${error.message}`);
     }
 }
 
-// 5. Agent NFT 정보 확인
-async function getAgentInfo(main, agentId) {
+/**
+ * @notice Agent NFT의 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} agentId 확인할 Agent ID
+ * @param {*} provider Provider 객체
+ * @returns Agent 정보 (roundId, typeHash, agentAddress)
+ */
+async function getAgentInfo(main, agentId, provider) {
     try {
-        const agentAddress = await main.managedContracts(0); // Agent는 0번 인덱스
+        const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, main.provider);
+        const agent = new Contract(agentAddress, abi, provider);
         
         const roundId = await agent.roundOf(agentId);
         const typeHash = await agent.typeOf(agentId);
@@ -93,7 +124,12 @@ async function getAgentInfo(main, agentId) {
     }
 }
 
-// 6. 라운드 당첨 정보 확인
+/**
+ * @notice 라운드의 당첨 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 당첨 정보 (winningHash, winnerCount)
+ */
 async function getRoundWinnerInfo(main, roundId) {
     try {
         const winnerInfo = await main.roundWinnerManageInfo(roundId);
@@ -103,7 +139,12 @@ async function getRoundWinnerInfo(main, roundId) {
     }
 }
 
-// 7. 라운드 정산 정보 확인
+/**
+ * @notice 라운드의 정산 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 정산 정보 (depositedAmount, totalPrizePayout, prizePerWinner, claimedAmount)
+ */
 async function getRoundSettleInfo(main, roundId) {
     try {
         const settleInfo = await main.roundSettleManageInfo(roundId);
@@ -113,7 +154,14 @@ async function getRoundSettleInfo(main, roundId) {
     }
 }
 
-// 8. claim 실행
+/**
+ * @notice claim 트랜잭션을 실행한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} wallet 수령자 지갑
+ * @param {*} roundId 라운드 ID
+ * @param {*} agentId Agent ID
+ * @returns 트랜잭션 정보 (transaction, receipt)
+ */
 async function executeClaim(main, wallet, roundId, agentId) {
     try {
         const claimTx = await main.connect(wallet).claim(roundId, agentId);
@@ -124,7 +172,16 @@ async function executeClaim(main, wallet, roundId, agentId) {
     }
 }
 
-// 9. 결과 포맷팅
+/**
+ * @notice claim 결과를 포맷팅한다.
+ * @param {*} wallet 수령자 지갑
+ * @param {*} claimTx claim 트랜잭션
+ * @param {*} receipt 트랜잭션 영수증
+ * @param {*} roundId 라운드 ID
+ * @param {*} agentId Agent ID
+ * @param {*} contractStatus 컨트랙트 상태
+ * @returns 포맷팅된 claim 결과
+ */
 function formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractStatus) {
     return {
         claimer: wallet.address,
@@ -163,17 +220,30 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
         // 2. 컨트랙트 초기화
         const main = await initializeContracts(mainAddress, provider);
         
-        // 3. 컨트랙트 상태 확인
-        const contractStatus = await getContractStatus(main);
+        // 3. 라운드번호 확인
+        const roundId = await getRoundId(main);
         
         // 4. 라운드 상태 확인
         const roundStatus = await getRoundStatus(main, roundId);
+        if(roundStatus != 3n) {
+            throw new Error("❌ 현재 라운드상태가 \"Claiming\"이 아닙니다.");
+        }
         
         // 5. Agent NFT 소유권 확인
-        const ownership = await checkAgentOwnership(main, wallet.address, agentId);
+        const ownership = await checkAgentOwnership(main, wallet.address, agentId, provider);
+        
+        // Agent NFT 존재 여부 확인
+        if (!ownership.exists) {
+            throw new Error(`❌ Agent NFT #${agentId}가 존재하지 않습니다.`);
+        }
+        
+        // 소유권 검사
+        if (!ownership.isOwner) {
+            throw new Error(`❌ Agent NFT #${agentId}의 소유자가 아닙니다. 소유자: ${ownership.owner}`);
+        }
         
         // 6. Agent NFT 정보 확인
-        const agentInfo = await getAgentInfo(main, agentId);
+        const agentInfo = await getAgentInfo(main, agentId, provider);
         
         // 7. 라운드 당첨 정보 확인
         const winnerInfo = await getRoundWinnerInfo(main, roundId);
@@ -185,7 +255,17 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
         const { transaction: claimTx, receipt } = await executeClaim(main, wallet, roundId, agentId);
 
         // 10. 결과 포맷팅
-        const result = formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractStatus);
+        const result = {
+            claimer: wallet.address,
+            transactionHash: claimTx.hash,
+            blockNumber: receipt.blockNumber,
+            roundId: roundId.toString(),
+            agentId: agentId.toString(),
+            agentType: agentInfo.typeHash.toString(),
+            prizeAmount: settleInfo.prizePerWinner.toString(),
+            totalWinners: winnerInfo.winnerCount.toString(),
+            claimTime: new Date().toISOString()
+        };
 
         return result;
 
@@ -195,109 +275,27 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
 }
 
 // 로깅 함수들 (별도로 사용)
-function logContractStatus(status) {
-    console.log("\n📊 현재 컨트랙트 상태:");
-    if (status.roundId !== null) {
-        console.log("  - 현재 라운드 ID:", status.roundId.toString());
-    } else {
-        console.log("  - 현재 라운드 ID: 확인 불가");
-    }
-    
-    if (status.donateAddr !== null) {
-        console.log("  - 기부 주소:", status.donateAddr);
-    } else {
-        console.log("  - 기부 주소: 확인 불가");
-    }
-    
-    if (status.corporateAddr !== null) {
-        console.log("  - 영리법인 주소:", status.corporateAddr);
-    } else {
-        console.log("  - 영리법인 주소: 확인 불가");
-    }
-    
-    if (status.operationAddr !== null) {
-        console.log("  - 운영비 주소:", status.operationAddr);
-    } else {
-        console.log("  - 운영비 주소: 확인 불가");
-    }
-}
-
-function logRoundStatus(roundStatus) {
-    console.log("\n🎯 라운드 상태:");
-    const statusNames = ["NotStarted", "Proceeding", "Drawing", "Claiming", "Refunding", "Ended"];
-    console.log("  - 상태:", statusNames[roundStatus] || "Unknown");
-}
-
-function logAgentOwnership(ownership) {
-    console.log("\n🎨 Agent NFT 소유권:");
-    console.log("  - 소유자:", ownership.owner);
-    console.log("  - 호출자 소유 여부:", ownership.isOwner ? "✅ 소유" : "❌ 미소유");
-}
-
-function logAgentInfo(agentInfo) {
-    console.log("\n🎨 Agent NFT 정보:");
-    console.log("  - 라운드 ID:", agentInfo.roundId.toString());
-    console.log("  - 타입 해시:", agentInfo.typeHash);
-}
-
-function logWinnerInfo(winnerInfo) {
-    console.log("\n🏆 라운드 당첨 정보:");
-    console.log("  - 당첨 해시:", winnerInfo.winningHash);
-    console.log("  - 당첨자 수:", winnerInfo.winnerCount.toString());
-}
-
-function logSettleInfo(settleInfo) {
-    console.log("\n💰 라운드 정산 정보:");
-    console.log("  - 총 모금액:", ethers.formatEther(settleInfo.depositedAmount));
-    console.log("  - 총 상금:", ethers.formatEther(settleInfo.totalPrizePayout));
-    console.log("  - 당첨자별 상금:", ethers.formatEther(settleInfo.prizePerWinner));
-    console.log("  - 수령된 상금:", ethers.formatEther(settleInfo.claimedAmount));
-}
-
-function logClaimResult(result) {
-    console.log("\n📋 claim 결과 요약:");
+/**
+ * @notice claim 결과를 출력한다.
+ * @param {*} result claim 결과물
+ */
+function logResult(result) {
+    console.log("\n📋 Claim Reports:");
     console.log("  - 수령자:", result.claimer);
     console.log("  - 트랜잭션 해시:", result.transactionHash);
+    console.log("  - 블록 번호:", result.blockNumber);
     console.log("  - 라운드 ID:", result.roundId);
     console.log("  - Agent ID:", result.agentId);
+    console.log("  - Agent Type:", result.agentType);
+    console.log("  - 받을 상금:", result.prizeAmount, "STT");
+    console.log("  - 총 당첨자 수:", result.totalWinners);
     console.log("  - 수령 시간:", result.claimTime);
-}
-
-function logClaimProcess(mainAddress, wallet, roundId, agentId, roundStatus, ownership, agentInfo, winnerInfo, settleInfo, claimTx, receipt) {
-    console.log("🌐 Provider URL:", wallet.provider.connection.url);
-    console.log("🎯 Main 컨트랙트 claim을 시작합니다...");
-    console.log("🎯 Main 컨트랙트 주소:", mainAddress);
-    console.log("🎨 수령자 주소:", wallet.address);
-    console.log("🎯 라운드 ID:", roundId);
-    console.log("🎨 Agent ID:", agentId);
-    console.log("📊 라운드 상태:", roundStatus);
-    console.log("🎨 Agent 소유자:", ownership.owner);
-    console.log("🏆 당첨 해시:", winnerInfo.winningHash);
-    console.log("💰 당첨자별 상금:", ethers.formatEther(settleInfo.prizePerWinner));
-    console.log("✅ claim 완료! 트랜잭션 해시:", claimTx.hash);
-    console.log("📦 블록 번호:", receipt.blockNumber);
 }
 
 // 모듈로 export
 module.exports = { 
     claim,
-    initializeContracts,
-    getContractStatus,
-    getRoundStatus,
-    checkAgentOwnership,
-    getAgentInfo,
-    getRoundWinnerInfo,
-    getRoundSettleInfo,
-    executeClaim,
-    formatClaimResult,
-    logContractStatus,
-    logRoundStatus,
-    logAgentOwnership,
-    logAgentInfo,
-    logWinnerInfo,
-    logSettleInfo,
-    logClaimResult,
-    logClaimProcess
+    logResult
 };
 
 // 직접 실행 시 (테스트용)

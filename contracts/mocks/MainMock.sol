@@ -15,6 +15,7 @@ contract MainMock is Main {
     /**
      * @notice 당첨 Agent NFT를 강제로 조작하여 정산한다.
      * @dev 당첨이후 동작 테스트를 위해 인위적으로 당첨 NFT를 조작하기 위한 함수
+     * 이 코드는 테스트코드 -> REAL version에서는 사용금지!
      * @param _roundId 라운드 번호
      * @param _winnerHash 당첨 Agent NFT의 typeHash
      */

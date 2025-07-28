@@ -1,4 +1,9 @@
-const { Contract, JsonRpcProvider, Wallet, ethers } = require("ethers");
+/**
+ * @file closeTicketRound.js
+ * @notice Main 컨트랙트 closeTicketRound 관련 Library
+ * @author hlibbc
+ */
+const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
@@ -12,38 +17,28 @@ async function initializeContracts(mainAddress, provider) {
     }
 }
 
-// 2. 컨트랙트 상태 확인
-async function getContractStatus(main) {
-    const status = {};
+/**
+ * @notice Main 컨트랙트의 라운드번호를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @returns roundId
+ */
+async function getRoundId(main) {
+    let roundId;
     
     try {
-        status.roundId = await main.roundId();
+        roundId = await main.roundId();
     } catch (error) {
-        status.roundId = null;
+        roundId = null;
     }
-    
-    try {
-        status.donateAddr = await main.donateAddr();
-    } catch (error) {
-        status.donateAddr = null;
-    }
-    
-    try {
-        status.corporateAddr = await main.corporateAddr();
-    } catch (error) {
-        status.corporateAddr = null;
-    }
-    
-    try {
-        status.operationAddr = await main.operationAddr();
-    } catch (error) {
-        status.operationAddr = null;
-    }
-    
-    return status;
+    return roundId;
 }
 
-// 3. 라운드 상태 확인
+/**
+ * @notice 특정 라운드의 상태를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 상태 (0: NotStarted, 1: Proceeding, 2: Drawing, 3: Claiming, 4: Refunding, 5: Ended)
+ */
 async function getRoundStatus(main, roundId) {
     try {
         const status = await main.getRoundStatus(roundId);
@@ -53,7 +48,12 @@ async function getRoundStatus(main, roundId) {
     }
 }
 
-// 4. 라운드 정보 확인
+/**
+ * @notice 라운드의 상세 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 상세 정보
+ */
 async function getRoundInfo(main, roundId) {
     try {
         const roundInfo = await main.roundStatusManageInfo(roundId);
@@ -63,7 +63,12 @@ async function getRoundInfo(main, roundId) {
     }
 }
 
-// 7. 라운드 종료 가능 시간 확인
+/**
+ * @notice 라운드 종료 가능 여부를 확인한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 종료 가능 여부 (remainTime, isAvailable, reason)
+ */
 async function checkCloseTicketAvailability(main, roundId) {
     try {
         // Main.sol의 getRemainTimeCloseTicketRound 함수 호출
@@ -90,7 +95,12 @@ async function checkCloseTicketAvailability(main, roundId) {
     }
 }
 
-// 8. closeTicketRound 실행
+/**
+ * @notice closeTicketRound 트랜잭션을 실행한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} wallet 종료자 지갑
+ * @returns 트랜잭션 정보 (transaction, receipt)
+ */
 async function executeCloseTicketRound(main, wallet) {
     try {
         const closeTicketTx = await main.connect(wallet).closeTicketRound();
@@ -99,18 +109,6 @@ async function executeCloseTicketRound(main, wallet) {
     } catch (error) {
         throw new Error(`closeTicketRound 실행 실패: ${error.message}`);
     }
-}
-
-// 9. 결과 포맷팅
-function formatCloseTicketRoundResult(wallet, closeTicketTx, receipt, roundId, contractStatus) {
-    return {
-        closer: wallet.address,
-        transactionHash: closeTicketTx.hash,
-        blockNumber: receipt.blockNumber,
-        roundId: roundId.toString(),
-        closeTime: new Date().toISOString(),
-        contractStatus: contractStatus
-    };
 }
 
 // 메인 closeTicketRound 함수 (순수 함수)
@@ -139,9 +137,8 @@ async function closeTicketRound(mainAddress, customProvider = null, customWallet
         // 2. 컨트랙트 초기화
         const main = await initializeContracts(mainAddress, provider);
         
-        // 3. 컨트랙트 상태 확인
-        const contractStatus = await getContractStatus(main);
-        const roundId = contractStatus.roundId;
+        // 3. 라운드번호 확인
+        const roundId = await getRoundId(main);
         
         if (!roundId || roundId.toString() === "0") {
             throw new Error("❌ 현재 진행 중인 라운드가 없습니다.");
@@ -149,15 +146,29 @@ async function closeTicketRound(mainAddress, customProvider = null, customWallet
         
         // 4. 라운드 상태 확인
         const roundStatus = await getRoundStatus(main, roundId);
+        if(roundStatus != 1n) {
+            throw new Error("❌ 현재 라운드상태가 \"Proceeding\"이 아닙니다.");
+        }
         
         // 7. 라운드 종료 가능 시간 확인
         const availability = await checkCloseTicketAvailability(main, roundId);
+        
+        // 종료 가능 여부 확인
+        // if (!availability.isAvailable) {
+        //     console.log("❌ 라운드 종료 불가능:", availability.reason);
+        //     throw new Error(`❌ 라운드 종료가 불가능합니다. 사유: ${availability.reason}`);
+        // }
         
         // 8. closeTicketRound 실행
         const { transaction: closeTicketTx, receipt } = await executeCloseTicketRound(main, wallet);
 
         // 9. 결과 포맷팅
-        const result = formatCloseTicketRoundResult(wallet, closeTicketTx, receipt, roundId, contractStatus);
+        const result = {
+            closer: wallet.address,
+            transactionHash: closeTicketTx.hash,
+            blockNumber: receipt.blockNumber,
+            roundId: roundId.toString()
+        };
 
         return result;
 
@@ -167,96 +178,22 @@ async function closeTicketRound(mainAddress, customProvider = null, customWallet
 }
 
 // 로깅 함수들 (별도로 사용)
-function logContractStatus(status) {
-    console.log("\n📊 현재 컨트랙트 상태:");
-    if (status.roundId !== null) {
-        console.log("  - 현재 라운드 ID:", status.roundId.toString());
-    } else {
-        console.log("  - 현재 라운드 ID: 확인 불가");
-    }
-    
-    if (status.donateAddr !== null) {
-        console.log("  - 기부 주소:", status.donateAddr);
-    } else {
-        console.log("  - 기부 주소: 확인 불가");
-    }
-    
-    if (status.corporateAddr !== null) {
-        console.log("  - 영리법인 주소:", status.corporateAddr);
-    } else {
-        console.log("  - 영리법인 주소: 확인 불가");
-    }
-    
-    if (status.operationAddr !== null) {
-        console.log("  - 운영비 주소:", status.operationAddr);
-    } else {
-        console.log("  - 운영비 주소: 확인 불가");
-    }
-}
-
-function logRoundStatus(roundStatus) {
-    console.log("\n🎯 라운드 상태:");
-    const statusNames = ["NotStarted", "Proceeding", "Drawing", "Claiming", "Refunding", "Ended"];
-    console.log("  - 상태:", statusNames[roundStatus] || "Unknown");
-}
-
-function logAdminStatus(isAdmin) {
-    console.log("\n👑 Admin 권한:");
-    console.log("  - Admin 여부:", isAdmin ? "✅ Admin" : "❌ 일반 사용자");
-}
-
-function logAgentOwnership(agentBalance) {
-    console.log("\n🎨 Agent NFT 보유량:");
-    console.log("  - 현재 라운드 보유량:", agentBalance.toString());
-}
-
-function logAvailability(availability) {
-    console.log("\n⏰ 라운드 종료 가능 시간:");
-    console.log("  - 현재 시간:", availability.currentTime);
-    console.log("  - 라운드 시작 시간:", availability.startedAt);
-    console.log("  - 종료 가능 시간:", availability.availAt);
-    console.log("  - 종료 가능 여부:", availability.isAvailable ? "✅ 가능" : "❌ 불가능");
-}
-
-function logCloseTicketRoundResult(result) {
-    console.log("\n📋 closeTicketRound 결과 요약:");
+/**
+ * @notice closeTicketRound 결과를 출력한다.
+ * @param {*} result closeTicketRound 결과물
+ */
+function logResult(result) {
+    console.log("\n📋 CloseTicketRound Reports:");
     console.log("  - 종료자:", result.closer);
     console.log("  - 트랜잭션 해시:", result.transactionHash);
+    console.log("  - 블록 번호:", result.blockNumber);
     console.log("  - 라운드 ID:", result.roundId);
-    console.log("  - 종료 시간:", result.closeTime);
-}
-
-function logCloseTicketRoundProcess(mainAddress, wallet, roundId, roundStatus, isAdmin, agentBalance, availability, closeTicketTx) {
-    console.log("🌐 Provider URL:", wallet.provider.connection.url);
-    console.log("🎯 Main 컨트랙트 closeTicketRound를 시작합니다...");
-    console.log("🎯 Main 컨트랙트 주소:", mainAddress);
-    console.log("🎨 종료자 주소:", wallet.address);
-    console.log("🎯 라운드 ID:", roundId);
-    console.log("📊 라운드 상태:", roundStatus);
-    console.log("👑 Admin 여부:", isAdmin ? "Admin" : "일반 사용자");
-    console.log("🎨 Agent 보유량:", agentBalance.toString());
-    console.log("⏰ 종료 가능 여부:", availability.isAvailable ? "가능" : "불가능");
-    console.log("✅ closeTicketRound 완료! 트랜잭션 해시:", closeTicketTx.hash);
-    console.log("📦 블록 번호:", closeTicketTx.receipt.blockNumber);
 }
 
 // 모듈로 export
 module.exports = { 
     closeTicketRound,
-    initializeContracts,
-    getContractStatus,
-    getRoundStatus,
-    getRoundInfo,
-    checkCloseTicketAvailability,
-    executeCloseTicketRound,
-    formatCloseTicketRoundResult,
-    logContractStatus,
-    logRoundStatus,
-    logAdminStatus,
-    logAgentOwnership,
-    logAvailability,
-    logCloseTicketRoundResult,
-    logCloseTicketRoundProcess
+    logResult
 };
 
 // 직접 실행 시 (테스트용)

@@ -87,7 +87,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     // def. CONSTANT
     uint256 public constant MINT_AT_TIME = 5; // 한번에 5개
     uint256 public constant MAX_FREE_MINTS_PER_DAY = 50; // 하루에 50개
-    string  public constant DEFAULT_BASE_URI = "http://test.sample.com/ItemParts/json/";
+    string  public constant DEFAULT_BASE_URI = "https://dev.todl.fun/api/file-download/json/";
     
     // def. VARIABLE
     address public mainAddr; /// Main 컨트랙트 주소

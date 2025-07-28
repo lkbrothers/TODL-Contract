@@ -1,4 +1,9 @@
-const { Contract, JsonRpcProvider, Wallet, ethers } = require("ethers");
+/**
+ * @file readMain.js
+ * @notice Main 컨트랙트 읽기 관련 Library
+ * @author hlibbc
+ */
+const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
@@ -12,7 +17,12 @@ async function initializeContracts(mainAddress, provider) {
     }
 }
 
-// 2. 컨트랙트 기본 정보 확인
+/**
+ * @notice Main 컨트랙트의 기본 정보를 반환한다.
+ * @dev 기본정보는 다음과 같다. (roundId, donateAddr, corporateAddr, operationAddr, managedContracts)
+ * @param {*} main Main 컨트랙트 주소
+ * @returns contractInfo (Main 컨트랙트의 기본 정보)
+ */
 async function getContractInfo(main) {
     try {
         const info = {};
@@ -40,7 +50,12 @@ async function getContractInfo(main) {
     }
 }
 
-// 3. 라운드 상태 정보 확인
+/**
+ * @notice 라운드의 상태 정보를 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} roundId 확인할 라운드 ID
+ * @returns 라운드 상태 정보 (roundStatus, startedAt, closeTicketAt, settledAt, refundedAt, endedAt, winningHash, winnerCount, depositedAmount, claimedAmount, donateAmount, corporateAmount, operationAmount, stakedAmount)
+ */
 async function getRoundStatusInfo(main, roundId) {
     try {
         const status = {};
@@ -76,7 +91,12 @@ async function getRoundStatusInfo(main, roundId) {
     }
 }
 
-// 4. STT 잔액 확인
+/**
+ * @notice 특정 주소의 STT 토큰 잔액을 반환한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} address 확인할 주소
+ * @returns STT 토큰 잔액
+ */
 async function getSttBalance(main, address) {
     try {
         const balance = await main.getCoinBalance(address);
@@ -86,7 +106,14 @@ async function getSttBalance(main, address) {
     }
 }
 
-// 5. 결과 포맷팅
+/**
+ * @notice readMain 결과를 포맷팅한다.
+ * @param {*} contractInfo 컨트랙트 기본 정보
+ * @param {*} roundStatusInfo 라운드 상태 정보
+ * @param {*} sttBalance STT 잔액
+ * @param {*} walletAddress 지갑 주소
+ * @returns 포맷팅된 readMain 결과
+ */
 function formatReadMainResult(contractInfo, roundStatusInfo, sttBalance, walletAddress) {
     return {
         contractInfo: contractInfo,
@@ -142,58 +169,12 @@ async function readMain(mainAddress, customProvider = null, customWallet = null)
     }
 }
 
-// 로깅 함수들 (별도로 사용)
-function logContractInfo(info) {
-    console.log("\n📊 Main 컨트랙트 정보:");
-    console.log("  - 현재 라운드 ID:", info.roundId.toString());
-    console.log("  - 기부 주소:", info.donateAddr);
-    console.log("  - 영리법인 주소:", info.corporateAddr);
-    console.log("  - 운영비 주소:", info.operationAddr);
-    
-    console.log("\n🔗 관리되는 컨트랙트들:");
-    const contractNames = ["Main", "ItemParts", "Agent", "Rng", "RewardPool", "StakePool", "Reserv", "Stt"];
-    info.managedContracts.forEach((addr, index) => {
-        if (addr && addr !== "0x0000000000000000000000000000000000000000") {
-            console.log(`  - ${contractNames[index]}: ${addr}`);
-        } else {
-            console.log(`  - ${contractNames[index]}: 설정되지 않음`);
-        }
-    });
-}
-
-function logRoundStatusInfo(status) {
-    console.log("\n🎯 라운드 상태 정보:");
-    const statusNames = ["NotStarted", "Proceeding", "Drawing", "Claiming", "Refunding", "Ended"];
-    console.log("  - 라운드 상태:", statusNames[status.roundStatus] || "Unknown");
-    
-    console.log("\n⏰ 라운드 시간 정보:");
-    console.log("  - 시작 시간:", status.startedAt ? new Date(Number(status.startedAt) * 1000).toISOString() : "미시작");
-    console.log("  - 세일 종료 시간:", status.closeTicketAt ? new Date(Number(status.closeTicketAt) * 1000).toISOString() : "미종료");
-    console.log("  - 정산 시간:", status.settledAt ? new Date(Number(status.settledAt) * 1000).toISOString() : "미정산");
-    console.log("  - 환불 시간:", status.refundedAt ? new Date(Number(status.refundedAt) * 1000).toISOString() : "미환불");
-    console.log("  - 종료 시간:", status.endedAt ? new Date(Number(status.endedAt) * 1000).toISOString() : "미종료");
-    
-    console.log("\n🏆 라운드 당첨 정보:");
-    console.log("  - 당첨 해시:", status.winningHash);
-    console.log("  - 당첨자 수:", status.winnerCount.toString());
-    
-    console.log("\n💰 라운드 정산 정보:");
-    console.log("  - 총 입금액:", ethers.formatEther(status.depositedAmount), "STT");
-    console.log("  - 총 수령액:", ethers.formatEther(status.claimedAmount), "STT");
-    console.log("  - 기부금:", ethers.formatEther(status.donateAmount), "STT");
-    console.log("  - 투자금:", ethers.formatEther(status.corporateAmount), "STT");
-    console.log("  - 운영비:", ethers.formatEther(status.operationAmount), "STT");
-    console.log("  - 스테이킹:", ethers.formatEther(status.stakedAmount), "STT");
-}
-
-function logSttBalance(balance, walletAddress) {
-    console.log("\n💰 STT 잔액 정보:");
-    console.log("  - 지갑 주소:", walletAddress);
-    console.log("  - STT 잔액:", ethers.formatEther(balance), "STT");
-}
-
-function logReadMainResult(result) {
-    console.log("\n📋 Main 컨트랙트 읽기 결과 요약:");
+/**
+ * @notice readMain 결과를 출력한다.
+ * @param {*} result readMain 결과물
+ */
+function logResult(result) {
+    console.log("\n📋 ReadMain Reports:");
     console.log("  - 읽기 시간:", result.readTime);
     console.log("  - 현재 라운드 ID:", result.contractInfo.roundId.toString());
     console.log("  - 라운드 상태:", result.roundStatusInfo.roundStatus);
@@ -203,15 +184,7 @@ function logReadMainResult(result) {
 // 모듈로 export
 module.exports = { 
     readMain,
-    initializeContracts,
-    getContractInfo,
-    getRoundStatusInfo,
-    getSttBalance,
-    formatReadMainResult,
-    logContractInfo,
-    logRoundStatusInfo,
-    logSttBalance,
-    logReadMainResult
+    logResult
 };
 
 // 직접 실행 시 (테스트용)

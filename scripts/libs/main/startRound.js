@@ -1,7 +1,19 @@
+/**
+ * @file startRound.js
+ * @notice Main 컨트랙트 startRound 관련 Library
+ * @author hlibbc
+ */
 const { ethers } = require("hardhat");
 const crypto = require('crypto');
 
-// EIP-712 시그니처 생성 함수
+/**
+ * @notice EIP-712 표준에 따른 RNG 시그니처를 생성한다.
+ * @param {*} adminWallet Admin 지갑
+ * @param {*} rngAddress RNG 컨트랙트 주소
+ * @param {*} roundId 라운드 ID
+ * @param {*} randSeed 랜덤 시드
+ * @returns EIP-712 시그니처
+ */
 async function createSignature(adminWallet, rngAddress, roundId, randSeed) {
     const rngDomain = {
         name: 'Custom-Rng',
@@ -26,7 +38,15 @@ async function createSignature(adminWallet, rngAddress, roundId, randSeed) {
     return rngSignature;
 }
 
-// startRound 실행 함수
+/**
+ * @notice startRound 트랜잭션을 실행한다.
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} adminWallet Admin 지갑
+ * @param {*} rngAddress RNG 컨트랙트 주소
+ * @param {*} roundId 라운드 ID
+ * @param {*} randSeed 랜덤 시드
+ * @returns 트랜잭션 정보 (success, transaction)
+ */
 async function executeStartRound(main, adminWallet, rngAddress, roundId, randSeed) {
     try {
         // EIP-712 시그니처 생성
@@ -42,7 +62,13 @@ async function executeStartRound(main, adminWallet, rngAddress, roundId, randSee
     }
 }
 
-// 메인 startRound 함수
+/**
+ * @notice 새로운 라운드를 시작한다.
+ * @param {*} mainAddress Main 컨트랙트 주소
+ * @param {*} customProvider 커스텀 Provider (optional)
+ * @param {*} customWallet 커스텀 Wallet (optional)
+ * @returns 라운드 시작 결과 (success, roundId, randSeed, transaction, roundStatus)
+ */
 async function startRound(mainAddress, customProvider = null, customWallet = null) {
     try {
         // 1. Provider 및 Wallet 설정
@@ -97,7 +123,11 @@ async function startRound(mainAddress, customProvider = null, customWallet = nul
     }
 }
 
-// 라운드 상태 이름 변환 함수
+/**
+ * @notice 라운드 상태 번호를 상태 이름으로 변환한다.
+ * @param {*} status 라운드 상태 번호
+ * @returns 라운드 상태 이름 (NotStarted, Proceeding, Drawing, Claiming, Refunding, Ended)
+ */
 function getStatusName(status) {
     const statusNames = ['NotStarted', 'Proceeding', 'Drawing', 'Claiming', 'Refunding', 'Ended'];
     return statusNames[status] || `Unknown(${status})`;

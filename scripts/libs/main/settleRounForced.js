@@ -1,6 +1,6 @@
 /**
- * @file settleRound.js
- * @notice Main 컨트랙트 settleRound 관련 Library
+ * @file settleRounForced.js
+ * @notice Main 컨트랙트 settleRoundForced 관련 Library
  * @author hlibbc
  */
 const { ethers } = require("hardhat");
@@ -22,33 +22,34 @@ function getTimeUntilNextMidnight() {
 }
 
 /**
- * @notice settleRound 트랜잭션을 실행한다.
+ * @notice settleRoundForced 트랜잭션을 실행한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} adminWallet Admin 지갑
- * @param {*} randSeed 랜덤 시드
+ * @param {*} roundId 라운드 ID
+ * @param {*} winnerHash 당첨 해시
  * @returns 트랜잭션 정보 (success, transaction)
  */
-async function executeSettleRound(main, adminWallet, randSeed) {
+async function executeSettleRoundForced(main, adminWallet, roundId, winnerHash) {
     try {
-        // settleRound 호출
-        const settleRoundTx = await main.connect(adminWallet).settleRound(randSeed);
-        await settleRoundTx.wait();
+        // settleRoundForced 호출
+        const settleRoundForcedTx = await main.connect(adminWallet).settleRoundForced(roundId, winnerHash);
+        await settleRoundForcedTx.wait();
         
-        return { success: true, transaction: settleRoundTx };
+        return { success: true, transaction: settleRoundForcedTx };
     } catch (error) {
         throw error;
     }
 }
 
 /**
- * @notice 라운드를 정산한다.
+ * @notice 라운드를 강제 정산한다.
  * @param {*} mainAddress Main 컨트랙트 주소
- * @param {*} randSeed 랜덤 시드
+ * @param {*} winnerHash 당첨 해시
  * @param {*} customProvider 커스텀 Provider (optional)
  * @param {*} customWallet 커스텀 Wallet (optional)
- * @returns 라운드 정산 결과 (success, roundId, randSeed, transaction, previousStatus, newStatus, settleInfo, winnerInfo)
+ * @returns 라운드 강제 정산 결과 (success, roundId, winnerHash, transaction, previousStatus, newStatus, settleInfo, winnerInfo)
  */
-async function settleRound(mainAddress, randSeed, customProvider = null, customWallet = null) {
+async function settleRoundForced(mainAddress, winnerHash, customProvider = null, customWallet = null) {
     try {
         // 1. Provider 및 Wallet 설정
         let provider, adminWallet;
@@ -70,7 +71,7 @@ async function settleRound(mainAddress, randSeed, customProvider = null, customW
         }
 
         // 2. 컨트랙트 초기화
-        const MainArtifact = require('../../../artifacts/contracts/Main.sol/Main.json');
+        const MainArtifact = require('../../../artifacts/contracts/mocks/MainMock.sol/MainMock.json');
         const main = new ethers.Contract(mainAddress, MainArtifact.abi, provider);
 
         // 3. 라운드번호 확인
@@ -82,8 +83,8 @@ async function settleRound(mainAddress, randSeed, customProvider = null, customW
             throw new Error("❌ 현재 라운드상태가 \"Drawing\"이 아닙니다.");
         }
 
-        // 5. settleRound 실행
-        const result = await executeSettleRound(main, adminWallet, randSeed);
+        // 5. settleRoundForced 실행
+        const result = await executeSettleRoundForced(main, adminWallet, currentRoundId, winnerHash);
 
         // 6. 라운드 상태 재확인
         const newRoundStatus = await main.getRoundStatus(currentRoundId);
@@ -97,7 +98,7 @@ async function settleRound(mainAddress, randSeed, customProvider = null, customW
         return {
             success: true,
             roundId: currentRoundId.toString(),
-            randSeed: randSeed,
+            winnerHash: winnerHash,
             transaction: result.transaction,
             previousStatus: getStatusName(roundStatus),
             newStatus: getStatusName(newRoundStatus),
@@ -120,4 +121,4 @@ function getStatusName(status) {
     return statusNames[status] || `Unknown(${status})`;
 }
 
-module.exports = { settleRound, executeSettleRound }; 
+module.exports = { settleRoundForced, executeSettleRoundForced }; 

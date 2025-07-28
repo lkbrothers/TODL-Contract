@@ -1,7 +1,17 @@
-const { Contract, JsonRpcProvider, Wallet } = require("ethers");
+/**
+ * @file mint.js
+ * @notice ItemParts NFT minting 관련 Library
+ * @author hlibbc
+ */
+const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
 require('dotenv').config();
 
-// 1. Provider 및 Contract 초기화
+/**
+ * @notice Provider 및 Contract 초기화
+ * @param {*} itemPartsAddress ItemParts NFT 컨트랙트 주소
+ * @param {*} provider 타겟 블록체인 SP URL
+ * @returns itemParts Contract Object
+ */
 async function initializeContracts(itemPartsAddress, provider) {
     try {
         const abi = require("../../../artifacts/contracts/ItemParts.sol/ItemPartsNFT.json").abi;
@@ -13,6 +23,12 @@ async function initializeContracts(itemPartsAddress, provider) {
 }
 
 // 2. 컨트랙트 상태 확인
+/**
+ * @notice ItemParts NFT의 주요정보를 반환한다.
+ * @dev 주요정보는 다음과 같다. (totalSupply, mintAtTime, maxMintsPerDay)
+ * @param {*} itemParts ItemParts NFT 컨트랙트 주소
+ * @returns status (ItemParts NFT의 주요정보)
+ */
 async function getContractStatus(itemParts) {
     const status = {};
     
@@ -37,7 +53,12 @@ async function getContractStatus(itemParts) {
     return status;
 }
 
-// 3. 민팅 전 상태 확인
+/**
+ * @notice 사용자의 일일 남은 민팅량을 반환한다.
+ * @param {*} itemParts ItemParts NFT 컨트랙트 주소
+ * @param {*} walletAddress 사용자의 주소 (EOA)
+ * @returns 사용자의 일일 남은 민팅량
+ */
 async function checkMintingStatus(itemParts, walletAddress) {
     try {
         const remainingMints = await itemParts.getRemainingMintsToday(walletAddress);
@@ -47,42 +68,75 @@ async function checkMintingStatus(itemParts, walletAddress) {
     }
 }
 
-// 4. 민팅 실행
+/**
+ * @notice ItemParts NFT mint를 수행한다.
+ * @dev 한번에 mintAtTime만큼 민팅되며, 디폴트 mintAtTime 값은 5이다.
+ * 각각 랜덤하게 민팅된다.
+ * @param {*} itemParts ItemParts NFT 컨트랙트 주소
+ * @param {*} wallet 민팅을 수행할 사용자의 주소 (EOA)
+ * @returns 트랜잭션 정보 (txInfo, receipt, mintedTokens)
+ */
 async function executeMinting(itemParts, wallet) {
     try {
         const mintTx = await itemParts.connect(wallet).mint();
         const receipt = await mintTx.wait();
-        return { transaction: mintTx, receipt };
+        
+        // Minted 이벤트 파싱
+        const mintedTokens = [];
+        for (const log of receipt.logs) {
+            try {
+                // Minted 이벤트 시그니처:
+                const eventSignature = "Minted(uint256,address,uint256,uint256,uint256)";
+                const eventTopic = keccak256(toUtf8Bytes(eventSignature));
+                
+                if (log.topics[0] === eventTopic) {
+                    // 이벤트 데이터 파싱
+                    const tokenId = getBigInt(log.topics[1]); // indexed parameter
+                    
+                    // 32바이트 패딩된 주소에서 하위 20바이트 추출
+                    const paddedAddress = log.topics[2];
+                    const owner = "0x" + paddedAddress.slice(-40); // 하위 20바이트 (40자)
+                    
+                    mintedTokens.push({tokenId: tokenId.toString(), owner: owner});
+                }
+            } catch (error) {
+                // 이벤트 파싱 실패 시 무시하고 계속 진행
+                console.log("⚠️ 이벤트 파싱 실패:", error.message);
+            }
+        }
+        
+        return { transaction: mintTx, receipt, mintedTokens };
     } catch (error) {
         throw new Error(`민팅 실행 실패: ${error.message}`);
     }
 }
 
-// 5. 민팅된 토큰 정보 수집
-async function getMintedTokensInfo(itemParts, totalSupplyAfter, mintAtTimeValue) {
-    const mintedTokens = [];
-    const mintAtTimeNum = Number(mintAtTimeValue);
-    const totalSupplyNum = Number(totalSupplyAfter);
+/**
+ * @notice 이벤트에서 파싱된 토큰 정보를 기반으로 추가 정보를 수집
+ * @param {*} itemParts ItemParts NFT 컨트랙트
+ * @param {*} mintedTokens 이벤트에서 파싱된 토큰 정보 배열
+ * @returns minting된 토큰정보 배열 (tokenId, owner, typeName, partsIndex, originsIndex, setNumsIndex)
+ */
+async function getMintedTokensInfo(itemParts, mintedTokens) {
+    const enrichedTokens = [];
     
-    for (let i = 1; i <= mintAtTimeNum; i++) {
-        const tokenId = totalSupplyNum - mintAtTimeNum + i;
+    for (const token of mintedTokens) {
         try {
-            const owner = await itemParts.ownerOf(tokenId);
-            const tokenInfo = await itemParts.tokenInfo(tokenId);
+            const tokenInfo = await itemParts.tokenInfo(token.tokenId);
             
-            mintedTokens.push({
-                tokenId: tokenId.toString(),
-                owner: owner,
+            enrichedTokens.push({
+                tokenId: token.tokenId,
+                owner: token.owner,
                 typeName: tokenInfo.typeName,
-                partsIndex: tokenInfo.partsIndex.toString(),
-                originsIndex: tokenInfo.originsIndex.toString(),
-                setNumsIndex: tokenInfo.setNumsIndex.toString()
+                partsIndex: tokenInfo.partsIndex,
+                originsIndex: tokenInfo.originsIndex,
+                setNumsIndex: tokenInfo.setNumsIndex
             });
         } catch (error) {
-            // 토큰 정보를 가져올 수 없는 경우 빈 객체로 처리
-            mintedTokens.push({
-                tokenId: tokenId.toString(),
-                owner: null,
+            // 토큰 정보를 가져올 수 없는 경우 기본 정보만 사용
+            enrichedTokens.push({
+                tokenId: token.tokenId,
+                owner: token.owner,
                 typeName: null,
                 partsIndex: null,
                 originsIndex: null,
@@ -91,28 +145,20 @@ async function getMintedTokensInfo(itemParts, totalSupplyAfter, mintAtTimeValue)
             });
         }
     }
-    
-    return mintedTokens;
+    return enrichedTokens;
 }
 
-// 6. 결과 포맷팅
-function formatMintingResult(wallet, mintTx, receipt, mintedTokens, totalSupplyAfter, remainingAfter, contractStatus) {
-    return {
-        minter: wallet.address,
-        transactionHash: mintTx.hash,
-        blockNumber: receipt.blockNumber,
-        mintedTokens: mintedTokens,
-        totalSupply: totalSupplyAfter.toString(),
-        remainingMints: remainingAfter.toString(),
-        mintTime: new Date().toISOString(),
-        contractStatus: contractStatus
-    };
-}
-
-// 메인 민팅 함수 (순수 함수)
+// 메인 민팅 함수
+/**
+ * @notice ItemParts NFT 민팅을 수행한다.
+ * @param {*} itemPartsAddress ItemParts NFT 컨트랙트
+ * @param {*} customProvider provider 정보 (optional)
+ * @param {*} customWallet wallet 정보 (optional)
+ * @returns minting reports
+ */
 async function mintItemParts(itemPartsAddress, customProvider = null, customWallet = null) {
     try {
-        // 1. Provider 및 Wallet 설정
+        // Provider 및 Wallet 설정
         let provider, wallet;
         
         if (customProvider && customWallet) {
@@ -132,27 +178,27 @@ async function mintItemParts(itemPartsAddress, customProvider = null, customWall
             wallet = new Wallet(privateKey, provider);
         }
 
-        // 2. 컨트랙트 초기화
+        // 컨트랙트 초기화
         const itemParts = await initializeContracts(itemPartsAddress, provider);
         
-        // 3. 컨트랙트 상태 확인
-        const contractStatus = await getContractStatus(itemParts);
-        
-        // 4. 민팅 전 상태 확인
-        const remainingBefore = await checkMintingStatus(itemParts, wallet.address);
+        // 민팅 실행
+        const { transaction: mintTx, receipt, mintedTokens } = await executeMinting(itemParts, wallet);
 
-        // 5. 민팅 실행
-        const { transaction: mintTx, receipt } = await executeMinting(itemParts, wallet);
-
-        // 6. 민팅 후 상태 확인
-        const totalSupplyAfter = await itemParts.totalSupply();
+        // 민팅 후 상태 확인
         const remainingAfter = await checkMintingStatus(itemParts, wallet.address);
 
-        // 7. 민팅된 토큰 정보 수집
-        const mintedTokens = await getMintedTokensInfo(itemParts, totalSupplyAfter, contractStatus.mintAtTime);
+        // 민팅된 토큰 정보 수집
+        const enrichedTokens = await getMintedTokensInfo(itemParts, mintedTokens);
 
-        // 8. 결과 포맷팅
-        const result = formatMintingResult(wallet, mintTx, receipt, mintedTokens, totalSupplyAfter, remainingAfter, contractStatus);
+        // 결과 포맷팅 (minter, provider, txHash, blockNumber, enrichedTokens, remainMintAmount)
+        const result = {
+            minter: wallet.address,
+            provider: provider,
+            transactionHash: mintTx.hash,
+            blockNumber: receipt.blockNumber,
+            mintedTokens: enrichedTokens,
+            remainingMints: remainingAfter.toString()
+        };
 
         return result;
 
@@ -161,28 +207,25 @@ async function mintItemParts(itemPartsAddress, customProvider = null, customWall
     }
 }
 
-// 로깅 함수들 (별도로 사용)
-function logContractStatus(status) {
-    console.log("\n📊 현재 컨트랙트 상태:");
-    if (status.totalSupply !== null) {
-        console.log("  - 총 발행량:", status.totalSupply.toString());
-    } else {
-        console.log("  - 총 발행량: 확인 불가");
-    }
-    
-    if (status.mintAtTime !== null) {
-        console.log("  - mintAtTime:", status.mintAtTime.toString());
-    } else {
-        console.log("  - mintAtTime: 확인 불가");
-    }
-    
-    if (status.maxMintsPerDay !== null) {
-        console.log("  - maxMintsPerDay:", status.maxMintsPerDay.toString());
-    } else {
-        console.log("  - maxMintsPerDay: 확인 불가");
-    }
+/**
+ * @notice 민팅 결과를 출력한다.
+ * @param {*} result mintItemParts 결과물
+ */
+function logResult(result) {
+    console.log("\n📋 Minting Reports:");
+    console.log("  - minter:", result.minter);
+    console.log("  - transaction-hash:", result.transactionHash);
+    console.log("  - blockNumber:", result.blockNumber);
+    console.log("  - 민팅 수량:", result.mintedTokens.length);
+    console.log("  - 남은 민트갯수:", result.remainingMints);
+
+    logMintedTokens(result.mintedTokens);
 }
 
+/**
+ * @notice bulk로 민팅된 itemParts NFT 정보를 출력한다.
+ * @param {*} mintedTokens bulk로 민팅된 itemParts NFT 정보 (배열)
+ */
 function logMintedTokens(mintedTokens) {
     console.log("\n🎁 민팅된 NFT 정보:");
     mintedTokens.forEach((token, index) => {
@@ -200,40 +243,10 @@ function logMintedTokens(mintedTokens) {
     });
 }
 
-function logMintingResult(result) {
-    console.log("\n📋 민팅 결과 요약:");
-    console.log("  - 민터:", result.minter);
-    console.log("  - 트랜잭션 해시:", result.transactionHash);
-    console.log("  - 민팅된 NFT 개수:", result.mintedTokens.length);
-    console.log("  - 민팅 시간:", result.mintTime);
-}
-
-function logMintingProcess(itemPartsAddress, wallet, remainingBefore, mintTx, blockNumber, totalSupplyAfter, remainingAfter) {
-    console.log("🌐 Provider URL:", wallet.provider.connection.url);
-    console.log("🎨 ItemParts NFT 민팅을 시작합니다...");
-    console.log("🎯 ItemParts 컨트랙트 주소:", itemPartsAddress);
-    console.log("🎨 민터 주소:", wallet.address);
-    console.log("📈 민팅 전 남은 횟수:", remainingBefore.toString());
-    console.log("✅ 민팅 완료! 트랜잭션 해시:", mintTx.hash);
-    console.log("📦 블록 번호:", blockNumber);
-    console.log("\n📊 민팅 후 상태:");
-    console.log("  - 총 발행량:", totalSupplyAfter.toString());
-    console.log("  - 남은 민팅 횟수:", remainingAfter ? remainingAfter.toString() : "확인 불가");
-}
-
 // 모듈로 export
 module.exports = { 
     mintItemParts,
-    initializeContracts,
-    getContractStatus,
-    checkMintingStatus,
-    executeMinting,
-    getMintedTokensInfo,
-    formatMintingResult,
-    logContractStatus,
-    logMintedTokens,
-    logMintingResult,
-    logMintingProcess
+    logResult
 };
 
 // 직접 실행 시 (테스트용)
@@ -250,17 +263,7 @@ if (require.main === module) {
     mintItemParts(itemPartsAddress)
         .then((result) => {
             // CLI에서만 로깅 출력
-            logContractStatus(result.contractStatus);
-            logMintingProcess(
-                itemPartsAddress, 
-                { address: result.minter, provider: { connection: { url: process.env.PROVIDER_URL || "http://localhost:8545" } } }, 
-                result.remainingMints, 
-                { hash: result.transactionHash }, 
-                { blockNumber: result.blockNumber}, 
-                result.totalSupply, 
-                result.remainingMints);
-            logMintedTokens(result.mintedTokens);
-            logMintingResult(result);
+            logResult(result)
             console.log("\n🎯 민팅 스크립트 실행 완료");
             process.exit(0);
         })
