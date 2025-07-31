@@ -113,6 +113,9 @@ async function faucet(sttAddress, to, amount, customProvider = null, customWalle
         
         // 3. 전송자 STT 잔액 확인
         const senderBalance = await getSttBalance(stt, wallet.address);
+        if(senderBalance < amount) {
+            throw new Error("❌ 보유 금액이 너무 작습니다.");
+        }
         
         // 4. 수신자 STT 잔액 확인 (전송 전)
         const recipientBalanceBefore = await getSttBalance(stt, to);
@@ -123,16 +126,16 @@ async function faucet(sttAddress, to, amount, customProvider = null, customWalle
         // 6. 수신자 STT 잔액 확인 (전송 후)
         const recipientBalanceAfter = await getSttBalance(stt, to);
 
-        // 7. 컨트랙트 상태 정보
-        const contractStatus = {
-            senderBalance: senderBalance.toString(),
-            recipientBalanceBefore: recipientBalanceBefore.toString(),
-            recipientBalanceAfter: recipientBalanceAfter.toString(),
-            sttAddress: sttAddress
-        };
-
-        // 8. 결과 포맷팅
-        const result = formatTransferResult(wallet, transferTx, receipt, to, amount, contractStatus);
+        // 7. 결과 포맷팅
+        const result = {
+            sender: wallet.address,
+            recipient: to,
+            balanceBefore: recipientBalanceBefore,
+            amount: amount.toString(),
+            balanceAfter: recipientBalanceAfter,
+            transactionHash: transferTx.hash,
+            blockNumber: receipt.blockNumber
+        }
 
         return result;
 
@@ -149,9 +152,11 @@ function logResult(result) {
     console.log("\n📋 Faucet Reports:");
     console.log("  - 전송자:", result.sender);
     console.log("  - 수신자:", result.recipient);
+    console.log("  - 수신전 balance:", ethers.formatEther(result.balanceBefore), "STT");
+    console.log("  - 전송량:", ethers.formatEther(result.amount), "STT");
+    console.log("  - 수신후 balance:", ethers.formatEther(result.balanceAfter), "STT");
     console.log("  - 트랜잭션 해시:", result.transactionHash);
     console.log("  - 블록 번호:", result.blockNumber);
-    console.log("  - 전송량:", ethers.formatEther(result.amount), "STT");
     console.log("  - 전송 시간:", result.transferTime);
 }
 
