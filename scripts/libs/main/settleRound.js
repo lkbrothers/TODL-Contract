@@ -31,8 +31,14 @@ function getTimeUntilNextMidnight() {
 async function executeSettleRound(main, adminWallet, randSeed) {
     try {
         // settleRound 호출
-        const settleRoundTx = await main.connect(adminWallet).settleRound(randSeed);
-        await settleRoundTx.wait();
+        const settleRoundTx = await main.connect(adminWallet).settleRound(randSeed, {
+            gasLimit: 1500000
+        });
+        const receipt = await settleRoundTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${settleRoundTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
         
         return { success: true, transaction: settleRoundTx };
     } catch (error) {

@@ -154,8 +154,12 @@ async function executePermitAndTransferFrom(stt, spender, owner, to, amount, dea
             sig.s
         );
         console.log(`✅ Permit transaction sent: ${permitTx.hash}`);
-        await permitTx.wait();
+        const permitReceipt = await permitTx.wait();
         console.log(`✅ Permit transaction confirmed`);
+        
+        // Permit Gas 사용량 출력
+        console.log(`⛽ Permit Gas 사용량: ${permitReceipt.gasUsed.toString()} / ${permitTx.gasLimit.toString()}`);
+        console.log(`💰 Permit Gas 비용: ${ethers.formatEther(permitReceipt.gasUsed * permitReceipt.gasPrice)} ETH`);
         
         // spender의 현재 nonce 확인
         const currentNonce = await spender.provider.getTransactionCount(spender.address, "latest");
@@ -168,6 +172,10 @@ async function executePermitAndTransferFrom(stt, spender, owner, to, amount, dea
         });
         const receipt = await transferFromTx.wait();
         console.log(`✅ TransferFrom transaction confirmed: ${transferFromTx.hash}`);
+        
+        // TransferFrom Gas 사용량 출력
+        console.log(`⛽ TransferFrom Gas 사용량: ${receipt.gasUsed.toString()} / ${transferFromTx.gasLimit.toString()}`);
+        console.log(`💰 TransferFrom Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
         
         return { 
             permitTransaction: permitTx, 

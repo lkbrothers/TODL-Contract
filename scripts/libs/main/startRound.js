@@ -53,8 +53,14 @@ async function executeStartRound(main, adminWallet, rngAddress, roundId, randSee
         const signature = await createSignature(adminWallet, rngAddress, roundId, randSeed);
 
         // startRound 호출
-        const startRoundTx = await main.connect(adminWallet).startRound(signature);
-        await startRoundTx.wait();
+        const startRoundTx = await main.connect(adminWallet).startRound(signature, {
+            gasLimit: 300000
+        });
+        const receipt = await startRoundTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${startRoundTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
         
         return { success: true, transaction: startRoundTx };
     } catch (error) {

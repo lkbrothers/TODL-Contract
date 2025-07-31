@@ -197,7 +197,6 @@ async function getAgentType(agentAddress, tokenId, provider) {
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
         const agent = new Contract(agentAddress, abi, provider);
         const agentType = await agent.typeOf(tokenId);
-        console.log('>>>>>>>', agentType, tokenId)
         return agentType;
     } catch (error) {
         throw new Error(`Agent type 확인 실패: ${error.message}`);
@@ -215,8 +214,14 @@ async function getAgentType(agentAddress, tokenId, provider) {
  */
 async function executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig) {
     try {
-        const buyAgentTx = await main.connect(wallet).buyAgent(itemPartsIds, deadline, permitSig);
+        const buyAgentTx = await main.connect(wallet).buyAgent(itemPartsIds, deadline, permitSig, {
+            gasLimit: 1500000
+        });
         const receipt = await buyAgentTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${buyAgentTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
         
         // Agent NFT Minted 이벤트 파싱
         let mintedAgent = null;
@@ -242,7 +247,6 @@ async function executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig) 
                     let agentType = null;
                     try {
                         const agentAddress = await getAgentAddress(main);
-                        console.log('>>>>>>>', agentAddress, tokenId)
                         agentType = await getAgentType(agentAddress, tokenId, wallet.provider);
                     } catch (error) {
                         console.log("⚠️ Agent type 확인 실패:", error.message);

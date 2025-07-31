@@ -47,8 +47,15 @@ async function getSttBalance(stt, address) {
  */
 async function executeTransfer(stt, wallet, to, amount) {
     try {
-        const transferTx = await stt.connect(wallet).transfer(to, amount);
+        const transferTx = await stt.connect(wallet).transfer(to, amount, {
+            gasLimit: 1000000
+        });
         const receipt = await transferTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${transferTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
+        
         return { transaction: transferTx, receipt };
     } catch (error) {
         throw new Error(`STT 전송 실패: ${error.message}`);
