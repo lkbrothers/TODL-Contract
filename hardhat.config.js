@@ -32,6 +32,10 @@ module.exports = {
     LKtestnet: {
       url: process.env.PROVIDER_URL,
       accounts: [process.env.PRIVATE_KEY]
+    },
+    StatusNetwork: {
+      url: process.env.PROVIDER_URL,
+      accounts: [process.env.PRIVATE_KEY]
     }
   }
 };
