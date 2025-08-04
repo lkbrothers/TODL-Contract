@@ -159,6 +159,15 @@ async function getRoundSettleInfo(main, roundId) {
  */
 async function executeClaim(main, wallet, roundId, agentId) {
     try {
+        // isWinner 함수 호출 테스트
+        console.log("🔍 isWinner 함수 호출 테스트...");
+        try {
+            const isWinner = await main.isWinner(agentId);
+            console.log(`🏆 Agent #${agentId} isWinner 결과: ${isWinner}`);
+        } catch (error) {
+            console.log(`❌ isWinner 호출 실패: ${error.message}`);
+        }
+        
         const claimTx = await main.connect(wallet).claim(roundId, agentId, {
             gasLimit: 500000
         });
@@ -195,6 +204,8 @@ function formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractS
         contractStatus: contractStatus
     };
 }
+
+
 
 // 메인 claim 함수 (순수 함수)
 async function claim(mainAddress, roundId, agentId, customProvider = null, customWallet = null) {
@@ -253,7 +264,9 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
         // 8. 라운드 정산 정보 확인
         const settleInfo = await getRoundSettleInfo(main, roundId);
         
-        // 9. claim 실행
+
+        
+        // 10. claim 실행
         const { transaction: claimTx, receipt } = await executeClaim(main, wallet, roundId, agentId);
 
         // 10. 결과 포맷팅
