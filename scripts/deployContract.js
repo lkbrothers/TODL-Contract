@@ -47,14 +47,19 @@ async function main() {
 
     try {
         // 1. STT 토큰 먼저 배포
-        console.log("\n1️⃣ STT 토큰 배포 중...");
-        const SttToken = await ethers.getContractFactory("SttPermit");
-        const sttToken = await SttToken.connect(ownerWallet).deploy();
-        await sttToken.waitForDeployment();
-        const sttAddr = await sttToken.getAddress();
-        console.log("✅ STT 토큰 배포 완료:", sttAddr);
-        await waitIfNeeded();
-
+        let sttAddr;
+        if(hre.network.name == 'StatusNetwork') {
+            sttAddr = "0x1C3Ac2a186c6149Ae7Cb4D716eBbD0766E4f898a";
+            console.log("✅ STT 배포절차 skip! STT 토큰 주소:", sttAddr);
+        } else {
+            console.log("\n1️⃣ STT 토큰 배포 중...");
+            const SttToken = await ethers.getContractFactory("SttPermit");
+            const sttToken = await SttToken.connect(ownerWallet).deploy();
+            await sttToken.waitForDeployment();
+            sttAddr = await sttToken.getAddress();
+            console.log("✅ STT 토큰 배포 완료:", sttAddr);
+            await waitIfNeeded();
+        }
         // 2. Main 컨트랙트 배포
         // console.log("\n2️⃣ Main 컨트랙트 배포 중...");
         // const Main = await ethers.getContractFactory("Main");

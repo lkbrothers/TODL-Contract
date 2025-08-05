@@ -3,14 +3,14 @@
  * @notice Main 컨트랙트 closeTicketRound 관련 Library
  * @author hlibbc
  */
-const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
+const { ethers } = require("hardhat");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
 async function initializeContracts(mainAddress, provider) {
     try {
         const abi = require("../../../artifacts/contracts/Main.sol/Main.json").abi;
-        const main = new Contract(mainAddress, abi, provider);
+        const main = new ethers.Contract(mainAddress, abi, provider);
         return main;
     } catch (error) {
         throw new Error(`컨트랙트 초기화 실패: ${error.message}`);
@@ -103,8 +103,15 @@ async function checkCloseTicketAvailability(main, roundId) {
  */
 async function executeCloseTicketRound(main, wallet) {
     try {
-        const closeTicketTx = await main.connect(wallet).closeTicketRound();
+        const closeTicketTx = await main.connect(wallet).closeTicketRound({
+            gasLimit: 300000
+        });
         const receipt = await closeTicketTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${closeTicketTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
+        
         return { transaction: closeTicketTx, receipt };
     } catch (error) {
         throw new Error(`closeTicketRound 실행 실패: ${error.message}`);
@@ -130,8 +137,8 @@ async function closeTicketRound(mainAddress, customProvider = null, customWallet
                 throw new Error("❌ .env 파일에 PRIVATE_KEY가 설정되지 않았습니다.");
             }
             
-            provider = new JsonRpcProvider(providerUrl);
-            wallet = new Wallet(privateKey, provider);
+            provider = new ethers.JsonRpcProvider(providerUrl);
+            wallet = new ethers.Wallet(privateKey, provider);
         }
 
         // 2. 컨트랙트 초기화

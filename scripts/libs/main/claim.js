@@ -3,14 +3,14 @@
  * @notice Main 컨트랙트 claim 관련 Library
  * @author hlibbc
  */
-const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
+const { ethers } = require("hardhat");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
 async function initializeContracts(mainAddress, provider) {
     try {
         const abi = require("../../../artifacts/contracts/Main.sol/Main.json").abi;
-        const main = new Contract(mainAddress, abi, provider);
+        const main = new ethers.Contract(mainAddress, abi, provider);
         return main;
     } catch (error) {
         throw new Error(`컨트랙트 초기화 실패: ${error.message}`);
@@ -60,7 +60,7 @@ async function checkAgentOwnership(main, walletAddress, agentId, provider) {
     try {
         const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, provider);
+        const agent = new ethers.Contract(agentAddress, abi, provider);
         // Agent NFT 존재 여부 확인
         let exists = false;
         try {
@@ -104,7 +104,7 @@ async function getAgentInfo(main, agentId, provider) {
     try {
         const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, provider);
+        const agent = new ethers.Contract(agentAddress, abi, provider);
         
         const roundId = await agent.roundOf(agentId);
         const typeHash = await agent.typeOf(agentId);
@@ -159,8 +159,24 @@ async function getRoundSettleInfo(main, roundId) {
  */
 async function executeClaim(main, wallet, roundId, agentId) {
     try {
-        const claimTx = await main.connect(wallet).claim(roundId, agentId);
+        // isWinner 함수 호출 테스트
+        console.log("🔍 isWinner 함수 호출 테스트...");
+        try {
+            const isWinner = await main.isWinner(agentId);
+            console.log(`🏆 Agent #${agentId} isWinner 결과: ${isWinner}`);
+        } catch (error) {
+            console.log(`❌ isWinner 호출 실패: ${error.message}`);
+        }
+        
+        const claimTx = await main.connect(wallet).claim(roundId, agentId, {
+            gasLimit: 500000
+        });
         const receipt = await claimTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${claimTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
+        
         return { transaction: claimTx, receipt };
     } catch (error) {
         throw new Error(`claim 실행 실패: ${error.message}`);
@@ -189,6 +205,8 @@ function formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractS
     };
 }
 
+
+
 // 메인 claim 함수 (순수 함수)
 async function claim(mainAddress, roundId, agentId, customProvider = null, customWallet = null) {
     try {
@@ -208,8 +226,8 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
                 throw new Error("❌ .env 파일에 PRIVATE_KEY가 설정되지 않았습니다.");
             }
             
-            provider = new JsonRpcProvider(providerUrl);
-            wallet = new Wallet(privateKey, provider);
+            provider = new ethers.JsonRpcProvider(providerUrl);
+            wallet = new ethers.Wallet(privateKey, provider);
         }
 
         // 2. 컨트랙트 초기화
@@ -246,7 +264,9 @@ async function claim(mainAddress, roundId, agentId, customProvider = null, custo
         // 8. 라운드 정산 정보 확인
         const settleInfo = await getRoundSettleInfo(main, roundId);
         
-        // 9. claim 실행
+
+        
+        // 10. claim 실행
         const { transaction: claimTx, receipt } = await executeClaim(main, wallet, roundId, agentId);
 
         // 10. 결과 포맷팅

@@ -188,6 +188,11 @@ async function executeRefund(main, wallet, roundId, agentId) {
     try {
         const refundTx = await main.connect(wallet).refund(roundId, agentId);
         const receipt = await refundTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${refundTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
+        
         return { transaction: refundTx, receipt };
     } catch (error) {
         throw new Error(`refund 실행 실패: ${error.message}`);

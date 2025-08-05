@@ -25,6 +25,7 @@ contract Rng is EIP712, Ownable {
         address ender;      /// 라운드를 종료시킨 참여자
         uint256 blockTime;  /// 라운드 종료 블록 타임스탬프
         bytes32 salt;       /// Salt값: 라운드종료 블록의 50블록 이전 해시
+        uint256 randSeed;   /// 최초 commit시 생성했던 random seed
         bytes32 finalRands; /// 최종 난수 (reveal 이후 확정됨)
         bytes signature;    /// 라운드 시작 시 입력된 RoundSeedInfo에 대한 signer 서명
     }
@@ -192,8 +193,39 @@ contract Rng is EIP712, Ownable {
             abi.encodePacked(_randSeed, info.ender, info.salt, entropy1, entropy2)
         );
 
+        info.randSeed = _randSeed;
         info.finalRands = finalRng;
         emit Revealed(_roundId, _randSeed, finalRng);
+    }
+
+    /**
+     * @notice 라운드의 Reveal 프로시져 무결성을 재현한다.
+     * @dev 모두가 서명의 무결성을 확인할 수 있도록 하기 위함이다.
+     * 해당 라운드의 Reveal 이후 호출 가능하다.
+     * @param _roundId 라운드 ID
+     * @param _randSeed 라운드 commit 시 생성한 랜덤시드값
+     * @return 서명복원의 결과가 signer인지 여부 (boolean)
+     */
+    function recreateReveal(
+        uint256 _roundId, 
+        uint256 _randSeed
+    ) external view returns (bool) {
+        RoundRngInfo storage info = roundRngInfo[_roundId];
+        require(info.signature.length == 65, "Invalid signature length");
+        require(info.finalRands != bytes32(0), "Not reveal yet");
+        // EIP-712 hash 생성
+        bytes32 structHash = keccak256(abi.encode(
+            SIGDATA_TYPEHASH,
+            _roundId,
+            _randSeed
+        ));
+
+        bytes32 digest = _hashTypedDataV4(structHash);
+
+        // 서명 복원
+        address recovered = ECDSA.recover(digest, info.signature);
+        bool result = (recovered == signerAddr);
+        return result;
     }
 
     /**

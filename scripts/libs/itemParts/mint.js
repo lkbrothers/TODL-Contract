@@ -3,7 +3,7 @@
  * @notice ItemParts NFT minting 관련 Library
  * @author hlibbc
  */
-const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
+const { ethers } = require("hardhat");
 require('dotenv').config();
 
 /**
@@ -15,42 +15,11 @@ require('dotenv').config();
 async function initializeContracts(itemPartsAddress, provider) {
     try {
         const abi = require("../../../artifacts/contracts/ItemParts.sol/ItemPartsNFT.json").abi;
-        const itemParts = new Contract(itemPartsAddress, abi, provider);
+        const itemParts = new ethers.Contract(itemPartsAddress, abi, provider);
         return itemParts;
     } catch (error) {
         throw new Error(`컨트랙트 초기화 실패: ${error.message}`);
     }
-}
-
-// 2. 컨트랙트 상태 확인
-/**
- * @notice ItemParts NFT의 주요정보를 반환한다.
- * @dev 주요정보는 다음과 같다. (totalSupply, mintAtTime, maxMintsPerDay)
- * @param {*} itemParts ItemParts NFT 컨트랙트 주소
- * @returns status (ItemParts NFT의 주요정보)
- */
-async function getContractStatus(itemParts) {
-    const status = {};
-    
-    try {
-        status.totalSupply = await itemParts.totalSupply();
-    } catch (error) {
-        status.totalSupply = null;
-    }
-    
-    try {
-        status.mintAtTime = await itemParts.mintAtTime();
-    } catch (error) {
-        status.mintAtTime = null;
-    }
-    
-    try {
-        status.maxMintsPerDay = await itemParts.maxMintsPerDay();
-    } catch (error) {
-        status.maxMintsPerDay = null;
-    }
-    
-    return status;
 }
 
 /**
@@ -78,8 +47,14 @@ async function checkMintingStatus(itemParts, walletAddress) {
  */
 async function executeMinting(itemParts, wallet) {
     try {
-        const mintTx = await itemParts.connect(wallet).mint();
+        const mintTx = await itemParts.connect(wallet).mint({
+            gasLimit: 1500000 // 약 150만 gas limit 설정
+        });
         const receipt = await mintTx.wait();
+        
+        // Gas 사용량 출력
+        console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${mintTx.gasLimit.toString()}`);
+        console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
         
         // Minted 이벤트 파싱
         const mintedTokens = [];
@@ -87,11 +62,11 @@ async function executeMinting(itemParts, wallet) {
             try {
                 // Minted 이벤트 시그니처:
                 const eventSignature = "Minted(uint256,address,uint256,uint256,uint256)";
-                const eventTopic = keccak256(toUtf8Bytes(eventSignature));
+                const eventTopic = ethers.keccak256(ethers.toUtf8Bytes(eventSignature));
                 
                 if (log.topics[0] === eventTopic) {
                     // 이벤트 데이터 파싱
-                    const tokenId = getBigInt(log.topics[1]); // indexed parameter
+                    const tokenId = ethers.getBigInt(log.topics[1]); // indexed parameter
                     
                     // 32바이트 패딩된 주소에서 하위 20바이트 추출
                     const paddedAddress = log.topics[2];
@@ -174,8 +149,8 @@ async function mintItemParts(itemPartsAddress, customProvider = null, customWall
                 throw new Error("❌ .env 파일에 PRIVATE_KEY가 설정되지 않았습니다.");
             }
             
-            provider = new JsonRpcProvider(providerUrl);
-            wallet = new Wallet(privateKey, provider);
+            provider = new ethers.JsonRpcProvider(providerUrl);
+            wallet = new ethers.Wallet(privateKey, provider);
         }
 
         // 컨트랙트 초기화

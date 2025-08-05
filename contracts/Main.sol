@@ -545,6 +545,25 @@ contract Main is Ownable {
     }
 
     /**
+     * @notice 사용자가 당첨자인지 확인한다.
+     * @dev 라운드가 Claiming이어야 하며, Agent가 해당 라운드의 당첨 타입이어야 한다.
+     * @param _agentId 확인할 Agent NFT ID
+     * @return isWinner 당첨자 여부
+     */
+    function isWinner(uint256 _agentId) external view returns (bool) {
+        AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
+        uint256 roundIdOfAgent = agent.roundOf(_agentId);
+        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundIdOfAgent];
+        if(roundStatusInfo.status != Types.RoundStatus.Claiming) {
+            return false;
+        }
+        RoundWinnerManageInfo storage roundWinnerInfo = roundWinnerManageInfo[roundIdOfAgent];
+        bytes32 winningHash = roundWinnerInfo.winningHash;
+        bytes32 typeOfAgent = agent.typeOf(_agentId);
+        return winningHash == typeOfAgent;
+    }
+
+    /**
      * @notice 제출된 ItemParts의 유효성을 검증한다.
      * @dev 내부 함수로, buyAgent 함수에서 호출된다.
      * - 제출된 ItemParts 개수가 올바른지 확인
