@@ -508,9 +508,18 @@ contract Main is Ownable {
         remainTime = 0xffffffff;
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         if(roundStatusInfo.status == Types.RoundStatus.Proceeding) {
-            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-            uint64 elapsedTime = uint64(block.timestamp) - startedTimeEstimated;
-            remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
+            uint64 currentTime = uint64(block.timestamp);
+            if(currentTime - roundStatusInfo.startedAt < Types.ROUND_PERIOD) {
+                uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+                uint64 elapsedTime = currentTime - startedTimeEstimated;
+                if(uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) > elapsedTime) {
+                    remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
+                } else {
+                    remainTime = 0;
+                }
+            } else {
+                remainTime = 0;
+            }
         }
     }
     
