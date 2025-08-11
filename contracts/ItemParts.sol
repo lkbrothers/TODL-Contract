@@ -258,6 +258,14 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
             // 민트
             _mint(msg.sender, tokenId);
             emit Minted(tokenId, msg.sender, partIndex, originIndex, setNumsIndex);
+            // Storage 갱신
+            mintedTodayCount[msg.sender]++;
+            tokenInfo[tokenId].partsIndex = partIndex;
+            tokenInfo[tokenId].originsIndex = originIndex;
+            tokenInfo[tokenId].setNumsIndex = setNumsIndex;
+            tokenInfo[tokenId].typeHash = typeHash;
+            countPerMintType[typeHash].mintCount++;
+            _setTypeName(tokenId, partIndex, originIndex, setNumsIndex);
             // tokenURI 설정
             string memory tokenUri = string(
                 abi.encodePacked(
@@ -267,14 +275,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
                 )
             );
             _setTokenURI(tokenId, tokenUri);
-            // Storage 갱신
-            mintedTodayCount[msg.sender]++;
-            tokenInfo[tokenId].partsIndex = partIndex;
-            tokenInfo[tokenId].originsIndex = originIndex;
-            tokenInfo[tokenId].setNumsIndex = setNumsIndex;
-            tokenInfo[tokenId].typeHash = typeHash;
-            countPerMintType[typeHash].mintCount++;
-            _setTypeName(tokenId, partIndex, originIndex, setNumsIndex);
         }
     }
 
