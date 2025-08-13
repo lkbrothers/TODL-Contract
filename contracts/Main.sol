@@ -508,18 +508,9 @@ contract Main is Ownable {
         remainTime = 0xffffffff;
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         if(roundStatusInfo.status == Types.RoundStatus.Proceeding) {
-            uint64 currentTime = uint64(block.timestamp);
-            if(currentTime - roundStatusInfo.startedAt < Types.ROUND_PERIOD) {
-                uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-                uint64 elapsedTime = currentTime - startedTimeEstimated;
-                if(uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) > elapsedTime) {
-                    remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
-                } else {
-                    remainTime = 0;
-                }
-            } else {
-                remainTime = 0;
-            }
+            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+            uint64 elapsedTime = uint64(block.timestamp) - startedTimeEstimated;
+            remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
         }
     }
     
@@ -681,17 +672,15 @@ contract Main is Ownable {
                 RoundSettleManageInfo storage nextRoundSettleInfo = roundSettleManageInfo[_roundId+1];
                 nextRoundSettleInfo.depositedAmount = totalPrizePayout;
             }
-            
-            
         }
     }
 
     /**
-     * @notice 라운드 종료 시 남은 금액을 이월 처리한다.
+     * @notice 라운드 종료 시 남은 금액을 이월 처리한다. "이월 처리라 함은 '못찾아간 돈'을 Reserv 컨트랙트로 보내 보관하는 것을 의미"한다.
      * @dev 내부 함수로, endRound, claim, refund 함수에서 호출된다.
      * - 총 모금액과 지출된 금액의 차이를 계산
      * - 금액 불일치가 있으면 에러를 발생시킴
-     * - 남은 금액을 StakePool로 이월
+     * - 남은 금액을 Reserv로 이월
      * @param _roundId 이월 처리할 라운드 ID
      */
     function _carryingOutProc(uint256 _roundId) internal {
@@ -719,7 +708,7 @@ contract Main is Ownable {
             uint256 carryingOutAmount = depositedAmount - spentAmount;
             if(carryingOutAmount > 0) {
                 RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], carryingOutAmount);
+                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.Reserv)], carryingOutAmount);
             }
         }
     }
