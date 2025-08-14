@@ -105,7 +105,7 @@ contract Main is Ownable {
     event RoundEnd(uint256 indexed roundId);
 
     // def. ERROR
-    error CannotEndRoundYet(uint256 roundId, uint256 startAt, uint256 currentTime);
+    error CannotEndRoundYet(uint256 roundId, uint64 startAt, uint64 currentTime);
     error CloseTicketRoundNotReady(uint64 currentTime, uint64 startAt, uint64 availAt);
     error EndRoundNotAllowed(uint256 roundId, uint256 roundStatus);
     error InsufficientCoin(address buyer, uint256 amount);
@@ -271,10 +271,12 @@ contract Main is Ownable {
         require(admins[msg.sender] != true, "Not permitted");
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         require(roundStatusInfo.status == Types.RoundStatus.Proceeding, "Round is not proceeding");
+        /// testmode (hlibbc)
+        // uint64 currentTime = uint64(block.timestamp);
         // uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-        // if(uint64(block.timestamp) - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
+        // if(currentTime - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
         //     revert CloseTicketRoundNotReady(
-        //         uint64(block.timestamp), 
+        //         currentTime, 
         //         startedTimeEstimated, 
         //         (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
         //     );
@@ -359,21 +361,14 @@ contract Main is Ownable {
         if(roundStatus == Types.RoundStatus.NotStarted || roundStatus == Types.RoundStatus.Ended) {
             revert EndRoundNotAllowed(_roundId, uint8(roundStatus));
         }
-        uint256 startedAt;
-        if(roundStatus == Types.RoundStatus.Proceeding) {
-            startedAt = roundStatusInfo.startedAt;
-        } else if(roundStatus == Types.RoundStatus.Drawing) {
-            startedAt = roundStatusInfo.closeTicketAt;
-        } else if(roundStatus == Types.RoundStatus.Claiming) {
-            startedAt = roundStatusInfo.settledAt;
-        } else { // roundStatus == Types.RoundStatus.Refunding
-            startedAt = roundStatusInfo.refundedAt;
-        }
-        if(uint64(block.timestamp) - startedAt < Types.ROUND_PAYOUT_LIMIT_TIME) {
-            revert CannotEndRoundYet(_roundId, startedAt, block.timestamp);
-        }
+        uint64 currentTime = uint64(block.timestamp);
+        /// testmode (hlibbc)
+        // uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+        // if(currentTime - startedTimeEstimated < Types.ROUND_PAYOUT_LIMIT_TIME) {
+        //     revert CannotEndRoundYet(_roundId, startedTimeEstimated, currentTime);
+        // }
         _carryingOutProc(_roundId);
-        roundStatusInfo.endedAt = uint64(block.timestamp);
+        roundStatusInfo.endedAt = currentTime;
         roundStatusInfo.status = Types.RoundStatus.Ended;
         emit RoundEnd(_roundId);
     }
@@ -442,9 +437,11 @@ contract Main is Ownable {
         {
             RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
             require(roundStatusInfo.status == Types.RoundStatus.Claiming, "Round is not claiming");
-            if(uint64(block.timestamp) - roundStatusInfo.settledAt > Types.ROUND_PAYOUT_LIMIT_TIME) {
+            uint64 currentTime = uint64(block.timestamp);
+            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+            if(currentTime - startedTimeEstimated > Types.ROUND_PAYOUT_LIMIT_TIME) {
                 _carryingOutProc(_roundId);
-                roundStatusInfo.endedAt = uint64(block.timestamp);
+                roundStatusInfo.endedAt = currentTime;
                 roundStatusInfo.status = Types.RoundStatus.Ended;
                 emit RoundEnd(_roundId);
             }
@@ -475,16 +472,19 @@ contract Main is Ownable {
         require(agent.roundOf(_agentId) == _roundId, "Mismatch (Agent & round)");
         {
             RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
+            uint64 currentTime = uint64(block.timestamp);
+            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
             if(roundStatusInfo.status == Types.RoundStatus.Proceeding || roundStatusInfo.status == Types.RoundStatus.Drawing) {
-                if(uint64(block.timestamp) - roundStatusInfo.startedAt > Types.ROUND_REFUND_AVAIL_TIME) {
-                    roundStatusInfo.refundedAt = uint64(block.timestamp);
+                /// testmode (hlibbc)
+                // if(currentTime - startedTimeEstimated > Types.ROUND_REFUND_AVAIL_TIME) {
+                    roundStatusInfo.refundedAt = currentTime;
                     roundStatusInfo.status = Types.RoundStatus.Refunding;
-                }
+                // }
             }
             require(roundStatusInfo.status == Types.RoundStatus.Refunding, "Round is not Refunding");
-            if(uint64(block.timestamp) - roundStatusInfo.refundedAt > Types.ROUND_PAYOUT_LIMIT_TIME) {
+            if(currentTime - startedTimeEstimated > Types.ROUND_PAYOUT_LIMIT_TIME) {
                 _carryingOutProc(_roundId);
-                roundStatusInfo.endedAt = uint64(block.timestamp);
+                roundStatusInfo.endedAt = currentTime;
                 roundStatusInfo.status = Types.RoundStatus.Ended;
                 emit RoundEnd(_roundId);
             }
@@ -508,9 +508,18 @@ contract Main is Ownable {
         remainTime = 0xffffffff;
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         if(roundStatusInfo.status == Types.RoundStatus.Proceeding) {
-            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-            uint64 elapsedTime = uint64(block.timestamp) - startedTimeEstimated;
-            remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
+            uint64 currentTime = uint64(block.timestamp);
+            if(currentTime - roundStatusInfo.startedAt < Types.ROUND_PERIOD) {
+                uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+                uint64 elapsedTime = currentTime - startedTimeEstimated;
+                if(uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) > elapsedTime) {
+                    remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
+                } else {
+                    remainTime = 0;
+                }
+            } else {
+                remainTime = 0;
+            }
         }
     }
     

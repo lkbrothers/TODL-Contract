@@ -67,8 +67,8 @@ contract Rng is EIP712, Ownable {
     );
     
     // def. CONSTANT
-    uint256 public constant ENTROPY_FACTOR1 = 6;  /// 첫 번째 엔트로피 팩터
-    uint256 public constant ENTROPY_FACTOR2 = 16; /// 두 번째 엔트로피 팩터
+    uint256 public constant ENTROPY_FACTOR1 = 65; /// 첫 번째 엔트로피 팩터
+    uint256 public constant ENTROPY_FACTOR2 = 69; /// 두 번째 엔트로피 팩터
     bytes32 public constant SIGDATA_TYPEHASH =    /// 서명 데이터 타입 해시
         keccak256("SigData(uint256 roundId,uint256 randSeed)");
 
