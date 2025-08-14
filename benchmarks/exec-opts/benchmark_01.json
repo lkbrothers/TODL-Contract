@@ -1,0 +1,14 @@
+{
+    "contractOpt": {
+        "flag": true
+    },
+    "accountOpt": {
+        "flag": true,
+        "count": 10
+    },
+    "chargeOpt": {
+        "flag": true,
+        "amountEth": 1,
+        "amountStt": 10
+    }
+}

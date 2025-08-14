@@ -86,7 +86,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     
     // def. CONSTANT
     uint256 public constant MINT_AT_TIME = 5; // 한번에 5개
-    uint256 public constant MAX_FREE_MINTS_PER_DAY = 50; // 하루에 50개
+    uint256 public constant MAX_FREE_MINTS_PER_DAY = 50000000; // 하루에 50개
     string  public constant DEFAULT_BASE_URI = "https://dev.todl.fun/api/file-download/json/";
     
     // def. VARIABLE
@@ -101,6 +101,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     string[] public origins; /// 기원별 문자열 배열
     string[] public setNums; /// 세트번호별 문자열 배열
 
+    mapping(address => uint256) public mintEntropy; /// mint 난수 생성을 위한 entropy
     mapping(uint256 => Types.MintTypeInfo) public tokenInfo; /// tokenID 별 MintTypeInfo
     mapping(bytes32 => Types.NftCounts) public countPerMintType; /// MintType별 민팅된 카운트
     mapping(address => uint256) public lastMintedDay; /// 주소별 마지막 민팅 날짜
@@ -247,7 +248,8 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         if(mintedTodayCount[msg.sender] > maxMintsPerDay) {
             revert DailyLimitsExceeded(block.timestamp);
         }
-        bytes32 hash = keccak256(abi.encode(msg.sender, block.timestamp)); // Entropies: msg.sender, block.timestamp
+        bytes32 hash = keccak256(abi.encode(msg.sender, mintEntropy[msg.sender])); // Entropies: msg.sender, nonces
+        mintEntropy[msg.sender]++;
         for(uint i = 0; i < mintAtTime; i++) {
             uint256 partIndex = uint8(hash[0+i]) % parts.length;
             uint256 originIndex = uint8(hash[10+i]) % origins.length;
@@ -258,6 +260,14 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
             // 민트
             _mint(msg.sender, tokenId);
             emit Minted(tokenId, msg.sender, partIndex, originIndex, setNumsIndex);
+            // Storage 갱신
+            mintedTodayCount[msg.sender]++;
+            tokenInfo[tokenId].partsIndex = partIndex;
+            tokenInfo[tokenId].originsIndex = originIndex;
+            tokenInfo[tokenId].setNumsIndex = setNumsIndex;
+            tokenInfo[tokenId].typeHash = typeHash;
+            countPerMintType[typeHash].mintCount++;
+            _setTypeName(tokenId, partIndex, originIndex, setNumsIndex);
             // tokenURI 설정
             string memory tokenUri = string(
                 abi.encodePacked(
@@ -267,14 +277,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
                 )
             );
             _setTokenURI(tokenId, tokenUri);
-            // Storage 갱신
-            mintedTodayCount[msg.sender]++;
-            tokenInfo[tokenId].partsIndex = partIndex;
-            tokenInfo[tokenId].originsIndex = originIndex;
-            tokenInfo[tokenId].setNumsIndex = setNumsIndex;
-            tokenInfo[tokenId].typeHash = typeHash;
-            countPerMintType[typeHash].mintCount++;
-            _setTypeName(tokenId, partIndex, originIndex, setNumsIndex);
         }
     }
 
