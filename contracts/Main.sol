@@ -88,21 +88,88 @@ contract Main is Ownable {
         uint256 indexed roundId, 
         address indexed msgSender
     );
+    
     /**
      * @notice 라운드 정산 이벤트
      * @param roundId 정산된 라운드 ID
      * @param winningHash 당첨 Agent hash
+     * @param donateAmount donate 정산 금액
+     * @param corporateAmount 투자금 정산 금액
+     * @param operationAmount 운영비 정산 금액
+     * @param stakedAmount 스테이킹 정산 금액
      */
     event RoundSettled(
         uint256 indexed roundId,
-        bytes32 winningHash
+        bytes32 indexed winningHash,
+        uint256 donateAmount,
+        uint256 corporateAmount,
+        uint256 operationAmount,
+        uint256 stakedAmount
     );
+
+    /**
+     * @notice 라운드 환불상태 천이 이벤트
+     * @param roundId 환불상태 천이된 라운드 ID
+     */
+    event RoundRefunded(uint256 indexed roundId);
 
     /**
      * @notice 라운드 종료 이벤트
      * @param roundId 종료된 라운드 ID
      */
     event RoundEnd(uint256 indexed roundId);
+
+    /**
+     * @notice buyAgent 이벤트
+     * @param buyer 구매자 주소
+     * @param roundId 라운드 ID
+     * @param agentId 생성한 Agent ID
+     * @param depositAmount 입금한 금액 (STT-wei)
+     * @param burnedParts0 ItemParts (Head)
+     * @param burnedParts1 ItemParts (Body)
+     * @param burnedParts2 ItemParts (Legs)
+     * @param burnedParts3 ItemParts (RHand)
+     * @param burnedParts4 ItemParts (LHand)
+     */
+    event Bought(
+        address indexed buyer,
+        uint256 indexed roundId,
+        uint256 indexed agentId,
+        uint256 depositAmount,
+        uint256 burnedParts0,
+        uint256 burnedParts1,
+        uint256 burnedParts2,
+        uint256 burnedParts3,
+        uint256 burnedParts4
+    );
+
+    /**
+     * @notice 클레임 이벤트
+     * @param claimer 클레임 수행한 주소
+     * @param roundId 클레임 라운드 ID
+     * @param claimedAmount 클레임 받은 STT Amount
+     * @param burnedAgentNftId 소각된 Agent NFT id
+     */
+    event Claimed(
+        address indexed claimer,
+        uint256 indexed roundId,
+        uint256 claimedAmount,
+        uint256 burnedAgentNftId
+    );
+
+    /**
+     * @notice 환불 이벤트
+     * @param refunder 환불 수행한 주소
+     * @param roundId 환불 라운드 ID
+     * @param refundedAmount 환불 받은 STT Amount (1 STT)
+     * @param burnedAgentNftId 소각된 Agent NFT id
+     */
+    event Refunded(
+        address indexed refunder,
+        uint256 indexed roundId,
+        uint256 refundedAmount,
+        uint256 burnedAgentNftId
+    );
 
     // def. ERROR
     error CannotEndRoundYet(uint256 roundId, uint64 startAt, uint64 currentTime);
@@ -322,6 +389,8 @@ contract Main is Ownable {
             )
         );
         require(success, "RNG: reveal failed");
+        roundStatusInfo.status = Types.RoundStatus.Claiming;
+        roundStatusInfo.settledAt = uint64(block.timestamp);
         
         {
             Rng rng = Rng(managedContracts[uint8(Types.ContractTags.Rng)]);
@@ -340,12 +409,21 @@ contract Main is Ownable {
             AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
             (uint mintCount,) = agent.mintTypeCountPerRound(roundId, roundWinnerInfo.winningHash); // 최종 당첨자 수
             roundWinnerInfo.winnerCount = mintCount;
-            emit RoundSettled(roundId, winningHash);
+            {
+               (uint256 donateAmount,
+                uint256 corporateAmount,
+                uint256 operationAmount,
+                uint256 stakedAmount) = _settlePrize(roundId); // 분배할 금액 정산
+                emit RoundSettled(
+                    roundId,
+                    winningHash,
+                    donateAmount,
+                    corporateAmount,
+                    operationAmount,
+                    stakedAmount
+                );
+            }
         }
-        _settlePrize(roundId); // 분배할 금액 정산
-
-        roundStatusInfo.status = Types.RoundStatus.Claiming;
-        roundStatusInfo.settledAt = uint64(block.timestamp);
     }
 
     /**
@@ -398,22 +476,52 @@ contract Main is Ownable {
             revert InsufficientCoin(msg.sender, callerBalance);
         }
         _checkValidItemParts(msg.sender, _itemPartsIds);
-        
-        RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-        rewardPool.deposit(msg.sender, Types.AGENT_MINTING_FEE, _deadline, _permitSig);
+        {
+            RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+            rewardPool.deposit(msg.sender, Types.AGENT_MINTING_FEE, _deadline, _permitSig);
 
-        RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[roundId];
-
-        roundSettleInfo.depositedAmount += Types.AGENT_MINTING_FEE; // 입금액 누적
-        
-        AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
-        agent.mint(msg.sender, roundId, _itemPartsIds);
-        
-        ItemPartsNFT itemParts = ItemPartsNFT(managedContracts[uint8(Types.ContractTags.ItemParts)]);
-        for(uint i = 0; i < _itemPartsIds.length; i++) {
-            itemParts.burn(msg.sender, _itemPartsIds[i]);
+            RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[roundId];
+            roundSettleInfo.depositedAmount += Types.AGENT_MINTING_FEE; // 입금액 누적 
+        }
+        {
+            AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
+            uint256 agentId = agent.mint(msg.sender, roundId, _itemPartsIds);
+            _emitBought(msg.sender, roundId, agentId, uint256(Types.AGENT_MINTING_FEE), _itemPartsIds);
+        }
+        {
+            ItemPartsNFT itemParts = ItemPartsNFT(managedContracts[uint8(Types.ContractTags.ItemParts)]);
+            for(uint i = 0; i < _itemPartsIds.length; i++) {
+                itemParts.burn(msg.sender, _itemPartsIds[i]);
+            }
         }
     }
+
+    /**
+     * @notice Agent 구매 완료 이벤트를 발생시키는 내부 함수
+     * @dev buyAgent 함수에서 호출되어 구매 정보를 이벤트로 기록
+     * @param buyer 구매자 주소
+     * @param _roundId 구매한 라운드 ID
+     * @param agentId 민팅된 Agent NFT의 ID
+     * @param fee 구매 시 지불한 수수료 (STT 토큰)
+     * @param ids 구매에 사용된 ItemParts NFT들의 ID 배열 (Head, Body, Legs, RHand, LHand 순서)
+     */
+    function _emitBought(
+        address buyer,
+        uint256 _roundId,
+        uint256 agentId,
+        uint256 fee,
+        uint256[] memory ids
+    ) internal {
+        // ids 길이 보장은 _checkValidItemParts에서 한다고 가정
+        emit Bought(
+            buyer,
+            _roundId,
+            agentId,
+            fee,
+            ids[0], ids[1], ids[2], ids[3], ids[4]
+        );
+    }
+
 
     /**
      * @notice 당첨 Agent NFT를 소각하고 당첨금을 수령한다.
@@ -453,6 +561,7 @@ contract Main is Ownable {
             uint256 amount = roundSettleInfo.prizePerWinner;
             rewardPool.withdraw(msg.sender, amount);
             roundSettleInfo.claimedAmount += amount;
+            emit Claimed(msg.sender, _roundId, amount, _agentId);
         }
     }
 
@@ -479,6 +588,7 @@ contract Main is Ownable {
                 // if(currentTime - startedTimeEstimated > Types.ROUND_REFUND_AVAIL_TIME) {
                     roundStatusInfo.refundedAt = currentTime;
                     roundStatusInfo.status = Types.RoundStatus.Refunding;
+                    emit RoundRefunded(_roundId);
                 // }
             }
             require(roundStatusInfo.status == Types.RoundStatus.Refunding, "Round is not Refunding");
@@ -496,6 +606,7 @@ contract Main is Ownable {
             uint256 amount = Types.AGENT_MINTING_FEE;
             rewardPool.withdraw(msg.sender, amount);
             roundSettleInfo.refundedAmount += amount;
+            emit Refunded(msg.sender, _roundId, amount, _agentId);
         }
     }
 
@@ -611,7 +722,13 @@ contract Main is Ownable {
      * - 즉시 출금이 필요한 항목들을 Pool에서 출금
      * @param _roundId 정산할 라운드 ID
      */
-    function _settlePrize(uint256 _roundId) internal {
+    function _settlePrize(uint256 _roundId) internal 
+    returns (
+        uint256 donateAmount,
+        uint256 corporateAmount,
+        uint256 operationAmount,
+        uint256 stakedAmount
+    ) {
         RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
         {
             uint256 depositedAmount = roundSettleInfo.depositedAmount;
@@ -624,10 +741,10 @@ contract Main is Ownable {
                 uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
                 uint256 rawPerWinner = totalPrizePayout / winnerCount;
                 uint256 prizePerWinner = (rawPerWinner / Types.SCALE) * Types.SCALE;
-                uint256 donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
-                uint256 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
-                uint256 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
-                uint256 stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
+                donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
+                corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
+                operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
+                stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
                 // 즉시 출금항목 (donate, corporate, stake, operation)
                 RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
                 if(donateAmount > 0) {
@@ -652,10 +769,10 @@ contract Main is Ownable {
             } else {
                 uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
                 uint256 prizePerWinner = 0;
-                uint256 donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
-                uint256 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
-                uint256 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
-                uint256 stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
+                donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
+                corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
+                operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
+                stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
                 // 즉시 출금항목 (donate, corporate, stake, operation)
                 RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
                 if(donateAmount > 0) {
