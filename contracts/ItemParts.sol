@@ -50,19 +50,13 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
      */
     event OriginsUpdated(uint256 arrayLength);
     /**
-     * @notice setNums 변경 이벤트
-     * @dev setNums를 다시 정의한다.
-     * @param arrayLength 변경된 배열의 총 길이
-     */
-    event SetnumsUpdated(uint256 arrayLength);
-    /**
      * @notice 민팅 이벤트
      * @dev 민팅횟수당 1회씩 발생
      * @param tokenId 민팅된 토큰ID
      * @param owner 소유자 주소
      * @param partsIndex 민팅된 토큰의 parts 인덱스
      * @param originsIndex 민팅된 토큰의 origins 인덱스
-     * @param setNumsIndex 민팅된 토큰의 setNums 인덱스
+     * @param setNumsIndex 민팅된 토큰의 세트번호명 인덱스
      */
     event Minted(
         uint256 indexed tokenId,
@@ -99,7 +93,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
 
     string[] public parts; /// 부위별 문자열 배열
     string[] public origins; /// 기원별 문자열 배열
-    string[] public setNums; /// 세트번호별 문자열 배열
 
     mapping(address => uint256) public mintEntropy; /// mint 난수 생성을 위한 entropy
     mapping(uint256 => Types.MintTypeInfo) public tokenInfo; /// tokenID 별 MintTypeInfo
@@ -131,9 +124,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         }
         for(uint8 i = 0; i < uint8(Types.Origins.Max); i++) {
             origins.push(_OriginstoString(i));
-        }
-        for(uint8 i = 0; i < uint8(Types.SetNums.Max); i++) {
-            setNums.push(_SetNumstoString(i));
         }
         mainAddr = _mainAddr;
         baseUri = DEFAULT_BASE_URI;
@@ -222,20 +212,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     }
 
     /**
-     * @notice setNums 배열 설정 함수
-     * @dev onlyOwner
-     * @param _setNums 새로운 setNums 배열
-     */
-    function setSetNums(string[] memory _setNums) external onlyOwner {
-        require(_setNums.length > 0, "Invalid args");
-        delete setNums;
-        for(uint i = 0; i < _setNums.length; i++) {
-            setNums.push(_setNums[i]);
-        }
-        emit SetnumsUpdated(setNums.length);
-    }
-
-    /**
      * @notice ItemParts NFT 민팅 함수
      * @dev 한 번에 mintAtTime 개수만큼 민팅
      */
@@ -253,7 +229,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         for(uint i = 0; i < mintAtTime; i++) {
             uint256 partIndex = uint8(hash[0+i]) % parts.length;
             uint256 originIndex = uint8(hash[10+i]) % origins.length;
-            uint256 setNumsIndex = uint8(hash[20+i]) % setNums.length;
+            uint256 setNumsIndex = uint8(hash[20+i]) % uint8(Types.SetNums.Max);
             bytes32 typeHash = getTypeHash(partIndex, originIndex, setNumsIndex);
 
             uint256 tokenId = ++totalSupply;
@@ -312,7 +288,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         result = abi.encodePacked(
             _PartstoString(_partsIndex), "-",
             _OriginstoString(_originsIndex), "-",
-            _SetNumstoString(_setNumsIndex)
+            _SetNumsToString(_partsIndex, _originsIndex, _setNumsIndex)
         );
     }
 
@@ -330,7 +306,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     ) public view returns (bytes32) {
         uint256 partsLen = parts.length;
         uint256 conceptLen = origins.length;
-        uint256 setNumsLen = setNums.length;
+        uint256 setNumsLen = uint256(uint8(Types.SetNums.Max));
         if(!(_partIndex < partsLen && _originIndex < conceptLen && _setNumsIndex < setNumsLen)) {
             revert InvalidTypeIndex(_partIndex, _originIndex, _setNumsIndex);
         }
@@ -338,7 +314,11 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
             abi.encodePacked(
                 parts[_partIndex], "-",
                 origins[_originIndex], "-",
-                setNums[_setNumsIndex]
+                _SetNumsToString(
+                    uint8(_partIndex), 
+                    uint8( _originIndex), 
+                    uint8(_setNumsIndex)
+                )
             )
         );
     }
@@ -397,7 +377,11 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         bytes memory rawBytes = abi.encodePacked(
             parts[_partIndex], "-",
             origins[_originIndex], "-",
-            setNums[_setNumsIndex]
+            _SetNumsToString(
+                uint8(_partIndex), 
+                uint8( _originIndex), 
+                uint8(_setNumsIndex)
+            )
         );
         string memory typeName = string(rawBytes); 
         tokenInfo[_tokenId].typeName = typeName;
@@ -421,12 +405,115 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         revert("Invalid Origins enum");
     }
 
-    function _SetNumstoString(uint8 index) internal pure returns(string memory) {
-        Types.SetNums _setNum = Types.SetNums(index);
-        if(_setNum == Types.SetNums.One)   return "1";
-        if(_setNum == Types.SetNums.Two)   return "2";
-        if(_setNum == Types.SetNums.Three) return "3";
-        if(_setNum == Types.SetNums.Four)  return "4";
+    function _SetNumsToString(
+        uint8 _partsIndex,
+        uint8 _originsIndex,
+        uint8 _setNumsIndex
+    ) internal pure returns(string memory) {
+        Types.Parts _part = Types.Parts(_partsIndex);
+        Types.Origins _origin = Types.Origins(_originsIndex);
+        Types.SetNums _setNum = Types.SetNums(_setNumsIndex);
+
+        if(_part == Types.Parts.Head) {
+            if(_origin == Types.Origins.Todl) {
+                if(_setNum == Types.SetNums.One) return "PICKERZHelmet";
+                if(_setNum == Types.SetNums.Two) return "Purifier";
+                if(_setNum == Types.SetNums.Three) return "SereneHelm";
+                if(_setNum == Types.SetNums.Four) return "SwiftHelmet";
+            }
+            if(_origin == Types.Origins.Earthling) {
+                if(_setNum == Types.SetNums.One) return "CodeNameSCACH";
+                if(_setNum == Types.SetNums.Two) return "EtherealYouth";
+                if(_setNum == Types.SetNums.Three) return "SPLAAlchemist";
+                if(_setNum == Types.SetNums.Four) return "VeiledGirl";
+            }
+            if(_origin == Types.Origins.BadGen) {
+                if(_setNum == Types.SetNums.One) return "GenHelm";
+                if(_setNum == Types.SetNums.Two) return "PaperGen";
+                if(_setNum == Types.SetNums.Three) return "SerpenGen";
+                if(_setNum == Types.SetNums.Four) return "SporeGen";
+            }
+        }
+        if(_part == Types.Parts.Body) {
+            if(_origin == Types.Origins.Todl) {
+                if(_setNum == Types.SetNums.One) return "AquaVoidTop";
+                if(_setNum == Types.SetNums.Two) return "BoltWindbreaker";
+                if(_setNum == Types.SetNums.Three) return "Flightsuit";
+                if(_setNum == Types.SetNums.Four) return "LuminaHood";
+            }
+            if(_origin == Types.Origins.Earthling) {
+                if(_setNum == Types.SetNums.One) return "BlackholeJacket";
+                if(_setNum == Types.SetNums.Two) return "LabCoat";
+                if(_setNum == Types.SetNums.Three) return "RelaxedMockneck";
+                if(_setNum == Types.SetNums.Four) return "SlamDriveTop";
+            }
+            if(_origin == Types.Origins.BadGen) {
+                if(_setNum == Types.SetNums.One) return "BadPlate";
+                if(_setNum == Types.SetNums.Two) return "GreyScholarTop";
+                if(_setNum == Types.SetNums.Three) return "LeafweaveTorso";
+                if(_setNum == Types.SetNums.Four) return "WrappedTorso";
+            }
+        }
+        if(_part == Types.Parts.Legs) {
+            if(_origin == Types.Origins.Todl) {
+                if(_setNum == Types.SetNums.One) return "FlightPants";
+                if(_setNum == Types.SetNums.Two) return "KineticSet";
+                if(_setNum == Types.SetNums.Three) return "POWerBoots";
+                if(_setNum == Types.SetNums.Four) return "TidecorePants";
+            }
+            if(_origin == Types.Origins.Earthling) {
+                if(_setNum == Types.SetNums.One) return "BootInKhaki";
+                if(_setNum == Types.SetNums.Two) return "ComfortSlacks";
+                if(_setNum == Types.SetNums.Three) return "RimRushShorts";
+                if(_setNum == Types.SetNums.Four) return "StealthPants";
+            }
+            if(_origin == Types.Origins.BadGen) {
+                if(_setNum == Types.SetNums.One) return "AcademyBottoms";
+                if(_setNum == Types.SetNums.Two) return "CorruptLimbs";
+                if(_setNum == Types.SetNums.Three) return "VineSoles";
+                if(_setNum == Types.SetNums.Four) return "WrappedPants";
+            }
+        }
+        if(_part == Types.Parts.RHand) {
+            if(_origin == Types.Origins.Todl) {
+                if(_setNum == Types.SetNums.One) return "EpicTape";
+                if(_setNum == Types.SetNums.Two) return "PurgeBag";
+                if(_setNum == Types.SetNums.Three) return "TissueCube";
+                if(_setNum == Types.SetNums.Four) return "VitalityTank";
+            }
+            if(_origin == Types.Origins.Earthling) {
+                if(_setNum == Types.SetNums.One) return "ChaosFlask";
+                if(_setNum == Types.SetNums.Two) return "RetroBasketBall";
+                if(_setNum == Types.SetNums.Three) return "SeeekerPhone";
+                if(_setNum == Types.SetNums.Four) return "StatusCoffee";
+            }
+            if(_origin == Types.Origins.BadGen) {
+                if(_setNum == Types.SetNums.One) return "JinxDeck";
+                if(_setNum == Types.SetNums.Two) return "MiasmaFig";
+                if(_setNum == Types.SetNums.Three) return "TaintedGun";
+                if(_setNum == Types.SetNums.Four) return "ToiletRoll";
+            }
+        }
+        if(_part == Types.Parts.LHand) {
+            if(_origin == Types.Origins.Todl) {
+                if(_setNum == Types.SetNums.One) return "EpicTape";
+                if(_setNum == Types.SetNums.Two) return "PurgeBag";
+                if(_setNum == Types.SetNums.Three) return "TissueCube";
+                if(_setNum == Types.SetNums.Four) return "VitalityTank";
+            }
+            if(_origin == Types.Origins.Earthling) {
+                if(_setNum == Types.SetNums.One) return "ChaosFlask";
+                if(_setNum == Types.SetNums.Two) return "RetroBasketBall";
+                if(_setNum == Types.SetNums.Three) return "SeeekerPhone";
+                if(_setNum == Types.SetNums.Four) return "StatusCoffee";
+            }
+            if(_origin == Types.Origins.BadGen) {
+                if(_setNum == Types.SetNums.One) return "JinxDeck";
+                if(_setNum == Types.SetNums.Two) return "MiasmaFig";
+                if(_setNum == Types.SetNums.Three) return "TaintedGun";
+                if(_setNum == Types.SetNums.Four) return "ToiletRoll";
+            }
+        }
         revert("Invalid SetNums enum");
     }
 }

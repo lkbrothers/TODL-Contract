@@ -144,23 +144,11 @@ describe("ItemParts NFT Contract", function () {
             expect(await itemParts.origins(1)).to.equal("NewOrigin2");
         });
 
-        it("setNums 배열을 설정할 수 있어야 한다", async function () {
-            const newSetNums = ["A", "B", "C"];
-            await itemParts.setSetNums(newSetNums);
-            
-            expect(await itemParts.setNums(0)).to.equal("A");
-            expect(await itemParts.setNums(1)).to.equal("B");
-            expect(await itemParts.setNums(2)).to.equal("C");
-        });
-
         it("빈 배열로 설정할 수 없어야 한다", async function () {
             await expect(itemParts.setParts([]))
                 .to.be.revertedWith("Invalid args");
             
             await expect(itemParts.setOrigins([]))
-                .to.be.revertedWith("Invalid args");
-            
-            await expect(itemParts.setSetNums([]))
                 .to.be.revertedWith("Invalid args");
         });
     });
