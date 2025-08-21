@@ -202,7 +202,6 @@ async function main() {
             const result = await refund(mainAddress, roundId, agentId);
             
             // 결과 로깅
-            logMainContractStatus4(result.contractStatus);
             logRefundResult(result);
             
             console.log("✅ main:refund 액션이 완료되었습니다.");

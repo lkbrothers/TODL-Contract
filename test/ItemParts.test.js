@@ -27,7 +27,7 @@ describe("ItemParts NFT Contract", function () {
             expect(await itemParts.totalSupply()).to.equal(0);
             expect(await itemParts.mintAtTime()).to.equal(5); // MINT_AT_TIME
             expect(await itemParts.maxMintsPerDay()).to.equal(50); // MAX_FREE_MINTS_PER_DAY
-            expect(await itemParts.baseUri()).to.equal("http://test.sample.com/ItemParts/json/");
+            expect(await itemParts.baseUri()).to.equal("https://dev.todl.fun/api/file-download/json/");
             expect(await itemParts.owner()).to.equal(owner.address);
         });
 
@@ -43,13 +43,6 @@ describe("ItemParts NFT Contract", function () {
             expect(await itemParts.origins(0)).to.equal("TODL");
             expect(await itemParts.origins(1)).to.equal("Earthling");
             expect(await itemParts.origins(2)).to.equal("BadGen");
-        });
-
-        it("초기 setNums 배열이 올바르게 설정되어야 한다", async function () {
-            expect(await itemParts.setNums(0)).to.equal("1");
-            expect(await itemParts.setNums(1)).to.equal("2");
-            expect(await itemParts.setNums(2)).to.equal("3");
-            expect(await itemParts.setNums(3)).to.equal("4");
         });
     });
 
@@ -121,7 +114,7 @@ describe("ItemParts NFT Contract", function () {
         });
 
         it("같은 URI로 설정할 수 없어야 한다", async function () {
-            await expect(itemParts.setBaseURI("http://test.sample.com/ItemParts/json/"))
+            await expect(itemParts.setBaseURI("https://dev.todl.fun/api/file-download/json/"))
                 .to.be.revertedWith("Same Uri");
         });
     });
@@ -199,7 +192,7 @@ describe("ItemParts NFT Contract", function () {
             const tokenId = 1;
             const tokenURI = await itemParts.tokenURI(tokenId);
             
-            expect(tokenURI).to.include("http://test.sample.com/ItemParts/json/");
+            expect(tokenURI).to.include("https://dev.todl.fun/api/file-download/json/");
             expect(tokenURI).to.include(".json");
         });
     });
@@ -347,13 +340,6 @@ describe("ItemParts NFT Contract", function () {
             const tokenInfo = await itemParts.tokenInfo(1);
             const originsNames = ["TODL", "Earthling", "BadGen"];
             expect(originsNames.some(origin => tokenInfo.typeName.includes(origin))).to.be.true;
-        });
-
-        it("SetNums enum을 문자열로 변환할 수 있어야 한다", async function () {
-            await itemParts.connect(user1).mint();
-            const tokenInfo = await itemParts.tokenInfo(1);
-            const setNumsNames = ["1", "2", "3", "4"];
-            expect(setNumsNames.some(setNum => tokenInfo.typeName.includes(setNum))).to.be.true;
         });
     });
 

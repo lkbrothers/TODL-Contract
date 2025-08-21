@@ -32,14 +32,16 @@ contract MainMock is Main {
             (uint256 donateAmount,
             uint256 corporateAmount,
             uint256 operationAmount,
-            uint256 stakedAmount) = _settlePrize(_roundId); // 분배할 금액 정산
+            uint256 stakedAmount,
+            uint256 carryAmount) = _settlePrize(_roundId); // 분배할 금액 정산
             emit RoundSettled(
                 roundId,
                 _winnerHash,
                 donateAmount,
                 corporateAmount,
                 operationAmount,
-                stakedAmount
+                stakedAmount,
+                carryAmount
             );
         }
     }

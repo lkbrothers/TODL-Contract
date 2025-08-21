@@ -97,6 +97,7 @@ contract Main is Ownable {
      * @param corporateAmount 투자금 정산 금액
      * @param operationAmount 운영비 정산 금액
      * @param stakedAmount 스테이킹 정산 금액
+     * @param carryAmount 다음라운드로 이월될 금액
      */
     event RoundSettled(
         uint256 indexed roundId,
@@ -104,7 +105,8 @@ contract Main is Ownable {
         uint256 donateAmount,
         uint256 corporateAmount,
         uint256 operationAmount,
-        uint256 stakedAmount
+        uint256 stakedAmount,
+        uint256 carryAmount
     );
 
     /**
@@ -192,6 +194,7 @@ contract Main is Ownable {
 
     // def. VARIABLE
     uint256 public roundId; // 현재 라운드 ID (1부터 시작)
+    uint256 public payoutLimitTime; // 클레임 / 환불 제한시간
     address public donateAddr; // Donation 주소
     address public corporateAddr; // 영리법인 주소
     address public operationAddr; // 운영비 주소
@@ -237,6 +240,7 @@ contract Main is Ownable {
             require(_admins[i] != address(0), "main: zero address (_admins)");
             admins[_admins[i]] = true;
         }
+        payoutLimitTime = Types.ROUND_PAYOUT_LIMIT_TIME;
     }
 
     /**
@@ -299,6 +303,19 @@ contract Main is Ownable {
         require(_operationAddress != address(0), "operation: zero address");
         require(operationAddr != _operationAddress, "operation: same address");
         operationAddr = _operationAddress;
+    }
+
+    /**
+     * @notice PayoutTime 을 설정한다.
+     * @dev Claim, Refund에 공통 적용된다.
+     * 라운드 시작된 날의 UTC00:00 기준으로 카운팅 된다.
+     * onlyOwner
+     * 최소 (Types.ROUND_REFUND_AVAIL_TIME)*2 (=> 4일) 보다는 크도록 입력 제한을 두었다.
+     * @param _limitTime 설정할 PayoutTime (sec)
+     */
+    function setPayoutLimitTime(uint64 _limitTime) external onlyOwner {
+        require(_limitTime > (Types.ROUND_REFUND_AVAIL_TIME)*2, "Invalid Time set");
+        payoutLimitTime = _limitTime;
     }
 
     /**
@@ -413,14 +430,16 @@ contract Main is Ownable {
                (uint256 donateAmount,
                 uint256 corporateAmount,
                 uint256 operationAmount,
-                uint256 stakedAmount) = _settlePrize(roundId); // 분배할 금액 정산
+                uint256 stakedAmount,
+                uint256 carryAmount) = _settlePrize(roundId); // 분배할 금액 정산
                 emit RoundSettled(
                     roundId,
                     winningHash,
                     donateAmount,
                     corporateAmount,
                     operationAmount,
-                    stakedAmount
+                    stakedAmount,
+                    carryAmount
                 );
             }
         }
@@ -429,7 +448,7 @@ contract Main is Ownable {
     /**
      * @notice 라운드를 종료한다.
      * @dev onlyAdmin
-     * 라운드가 시작된 후 ROUND_PAYOUT_LIMIT_TIME 시간이 지나면 라운드를 종료할 수 있다.
+     * 라운드가 시작된 후 payoutLimitTime (default: 30 days) 시간이 지나면 라운드를 종료할 수 있다.
      * 라운드 종료 시 남은 금액을 이월 처리한다.
      * @param _roundId 종료할 라운드 ID
      */
@@ -442,7 +461,7 @@ contract Main is Ownable {
         uint64 currentTime = uint64(block.timestamp);
         /// testmode (hlibbc)
         // uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-        // if(currentTime - startedTimeEstimated < Types.ROUND_PAYOUT_LIMIT_TIME) {
+        // if(currentTime - startedTimeEstimated < payoutLimitTime) {
         //     revert CannotEndRoundYet(_roundId, startedTimeEstimated, currentTime);
         // }
         _carryingOutProc(_roundId);
@@ -499,6 +518,7 @@ contract Main is Ownable {
     /**
      * @notice Agent 구매 완료 이벤트를 발생시키는 내부 함수
      * @dev buyAgent 함수에서 호출되어 구매 정보를 이벤트로 기록
+     * "Stack Too Deep" 문제 해결용
      * @param buyer 구매자 주소
      * @param _roundId 구매한 라운드 ID
      * @param agentId 민팅된 Agent NFT의 ID
@@ -547,7 +567,7 @@ contract Main is Ownable {
             require(roundStatusInfo.status == Types.RoundStatus.Claiming, "Round is not claiming");
             uint64 currentTime = uint64(block.timestamp);
             uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-            if(currentTime - startedTimeEstimated > Types.ROUND_PAYOUT_LIMIT_TIME) {
+            if(currentTime - startedTimeEstimated > payoutLimitTime) {
                 _carryingOutProc(_roundId);
                 roundStatusInfo.endedAt = currentTime;
                 roundStatusInfo.status = Types.RoundStatus.Ended;
@@ -592,7 +612,7 @@ contract Main is Ownable {
                 // }
             }
             require(roundStatusInfo.status == Types.RoundStatus.Refunding, "Round is not Refunding");
-            if(currentTime - startedTimeEstimated > Types.ROUND_PAYOUT_LIMIT_TIME) {
+            if(currentTime - startedTimeEstimated > payoutLimitTime) {
                 _carryingOutProc(_roundId);
                 roundStatusInfo.endedAt = currentTime;
                 roundStatusInfo.status = Types.RoundStatus.Ended;
@@ -727,7 +747,8 @@ contract Main is Ownable {
         uint256 donateAmount,
         uint256 corporateAmount,
         uint256 operationAmount,
-        uint256 stakedAmount
+        uint256 stakedAmount,
+        uint256 carryAmount
     ) {
         RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
         {
@@ -745,6 +766,7 @@ contract Main is Ownable {
                 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
                 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
                 stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
+                carryAmount = 0;
                 // 즉시 출금항목 (donate, corporate, stake, operation)
                 RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
                 if(donateAmount > 0) {
@@ -797,6 +819,7 @@ contract Main is Ownable {
                 // 상금은 다음라운드로 즉시 이월된다. (묻고 따블로가!)
                 RoundSettleManageInfo storage nextRoundSettleInfo = roundSettleManageInfo[_roundId+1];
                 nextRoundSettleInfo.depositedAmount = totalPrizePayout;
+                carryAmount = totalPrizePayout;
             }
         }
     }
