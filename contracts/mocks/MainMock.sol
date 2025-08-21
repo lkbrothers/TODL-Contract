@@ -25,10 +25,24 @@ contract MainMock is Main {
         AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
         (uint mintCount,) = agent.mintTypeCountPerRound(roundId, roundWinnerInfo.winningHash); // 최종 당첨자 수
         roundWinnerInfo.winnerCount = mintCount;
-        _settlePrize(_roundId); // 분배할 금액 정산
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
         roundStatusInfo.status = Types.RoundStatus.Claiming;
         roundStatusInfo.settledAt = uint64(block.timestamp);
-        emit RoundSettled(_roundId, _winnerHash);
+        {
+            (uint256 donateAmount,
+            uint256 corporateAmount,
+            uint256 operationAmount,
+            uint256 stakedAmount,
+            uint256 carryAmount) = _settlePrize(_roundId); // 분배할 금액 정산
+            emit RoundSettled(
+                roundId,
+                _winnerHash,
+                donateAmount,
+                corporateAmount,
+                operationAmount,
+                stakedAmount,
+                carryAmount
+            );
+        }
     }
 }

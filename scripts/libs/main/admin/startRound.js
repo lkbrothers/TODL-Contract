@@ -97,10 +97,10 @@ async function startRound(mainAddress, customProvider = null, customWallet = nul
         }
 
         // 2. 컨트랙트 초기화
-        const deploymentInfo = require('../../output/deployment-info.json');
+        const deploymentInfo = require('../../../output/deployment-info.json');
         const rngAddress = deploymentInfo.contracts.rng;
         
-        const MainArtifact = require('../../../artifacts/contracts/Main.sol/Main.json');
+        const MainArtifact = require('../../../../artifacts/contracts/Main.sol/Main.json');
         const main = new ethers.Contract(mainAddress, MainArtifact.abi, provider);
 
         // 3. 현재 라운드 정보 확인

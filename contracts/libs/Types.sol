@@ -14,7 +14,7 @@ library Types {
      * 환불중 부연설명: 
      *  정산이 일어나지 않은 상태에서 ROUND_PERIOD*2가 경과할 경우, refund 수행가능
      *  최초 refund가 일어나면 Refunding 상태로 천이
-     *  refunding 상태에서 ROUND_PAYOUT_LIMIT_TIME 후 Ended 상태로 천이가능
+     *  refunding 상태에서 payoutLimitTime (default: 30 days) 후 Ended 상태로 천이가능
      */
     enum RoundStatus { 
         NotStarted, /// 라운드 시작전
@@ -22,7 +22,7 @@ library Types {
         Drawing,    /// 개표중: closeTicketRound 에 의해 천이 (UTC23:00 ~ 23:59)
         Claiming,   /// 당첨금수령중: settleRound 에 의해 천이
         Refunding,  /// 환불중: @dev 참조,
-        Ended       /// 종료: Claiming 혹은 Refunding 시점부터 ROUND_PAYOUT_LIMIT_TIME 후 Ended 상태로 천이가능
+        Ended       /// 종료: Claiming 혹은 Refunding 시점부터 payoutLimitTime (default: 30 days) 후 Ended 상태로 천이가능
     }
 
     /**

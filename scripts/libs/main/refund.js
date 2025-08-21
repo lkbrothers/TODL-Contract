@@ -3,14 +3,14 @@
  * @notice Main 컨트랙트 refund 관련 Library
  * @author hlibbc
  */
-const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder } = require("ethers");
+const { ethers } = require("hardhat");
 require('dotenv').config();
 
 // 1. Provider 및 Contract 초기화
 async function initializeContracts(mainAddress, provider) {
     try {
         const abi = require("../../../artifacts/contracts/Main.sol/Main.json").abi;
-        const main = new Contract(mainAddress, abi, provider);
+        const main = new ethers.Contract(mainAddress, abi, provider);
         return main;
     } catch (error) {
         throw new Error(`컨트랙트 초기화 실패: ${error.message}`);
@@ -18,54 +18,19 @@ async function initializeContracts(mainAddress, provider) {
 }
 
 /**
- * @notice Main 컨트랙트의 주요정보를 반환한다.
- * @dev 주요정보는 다음과 같다. (roundId, donateAddr, corporateAddr, operationAddr)
+ * @notice Main 컨트랙트의 라운드번호를 반환한다.
  * @param {*} main Main 컨트랙트 주소
- * @returns status (Main 컨트랙트의 주요정보)
+ * @returns roundId
  */
-async function getContractStatus(main) {
-    const status = {};
+async function getRoundId(main) {
+    let roundId;
     
     try {
-        status.roundId = await main.roundId();
+        roundId = await main.roundId();
     } catch (error) {
-        status.roundId = null;
+        roundId = null;
     }
-    
-    try {
-        status.donateAddr = await main.donateAddr();
-    } catch (error) {
-        status.donateAddr = null;
-    }
-    
-    try {
-        status.corporateAddr = await main.corporateAddr();
-    } catch (error) {
-        status.corporateAddr = null;
-    }
-    
-    try {
-        status.operationAddr = await main.operationAddr();
-    } catch (error) {
-        status.operationAddr = null;
-    }
-    
-    return status;
-}
-
-/**
- * @notice 특정 라운드의 상태를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 상태 (0: NotStarted, 1: Proceeding, 2: Drawing, 3: Claiming, 4: Refunding, 5: Ended)
- */
-async function getRoundStatus(main, roundId) {
-    try {
-        const status = await main.getRoundStatus(roundId);
-        return status;
-    } catch (error) {
-        throw new Error(`라운드 상태 확인 실패: ${error.message}`);
-    }
+    return roundId;
 }
 
 /**
@@ -73,13 +38,31 @@ async function getRoundStatus(main, roundId) {
  * @param {*} main Main 컨트랙트 주소
  * @param {*} walletAddress 확인할 지갑 주소
  * @param {*} agentId 확인할 Agent ID
- * @returns 소유권 정보 (owner, isOwner, agentAddress)
+ * @param {*} provider Provider 객체
+ * @returns 소유권 정보 (owner, isOwner, agentAddress, exists)
  */
-async function checkAgentOwnership(main, walletAddress, agentId) {
+async function checkAgentOwnership(main, walletAddress, agentId, provider) {
     try {
         const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, main.provider);
+        const agent = new ethers.Contract(agentAddress, abi, provider);
+        // Agent NFT 존재 여부 확인
+        let exists = false;
+        try {
+            await agent.ownerOf(agentId);
+            exists = true;
+        } catch (error) {
+            exists = false;
+        }
+        
+        if (!exists) {
+            return {
+                owner: null,
+                isOwner: false,
+                agentAddress,
+                exists: false
+            };
+        }
         
         const owner = await agent.ownerOf(agentId);
         const isOwner = owner.toLowerCase() === walletAddress.toLowerCase();
@@ -87,7 +70,8 @@ async function checkAgentOwnership(main, walletAddress, agentId) {
         return {
             owner,
             isOwner,
-            agentAddress
+            agentAddress,
+            exists: true
         };
     } catch (error) {
         throw new Error(`Agent 소유권 확인 실패: ${error.message}`);
@@ -98,13 +82,14 @@ async function checkAgentOwnership(main, walletAddress, agentId) {
  * @notice Agent NFT의 정보를 반환한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} agentId 확인할 Agent ID
+ * @param {*} provider Provider 객체
  * @returns Agent 정보 (roundId, typeHash, agentAddress)
  */
-async function getAgentInfo(main, agentId) {
+async function getAgentInfo(main, agentId, provider) {
     try {
         const agentAddress = await main.managedContracts(2); // Agent는 2번 인덱스
         const abi = require("../../../artifacts/contracts/Agent.sol/AgentNFT.json").abi;
-        const agent = new Contract(agentAddress, abi, main.provider);
+        const agent = new ethers.Contract(agentAddress, abi, provider);
         
         const roundId = await agent.roundOf(agentId);
         const typeHash = await agent.typeOf(agentId);
@@ -120,56 +105,31 @@ async function getAgentInfo(main, agentId) {
 }
 
 /**
- * @notice 라운드의 상세 정보를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 상세 정보
- */
-async function getRoundInfo(main, roundId) {
-    try {
-        const roundInfo = await main.roundStatusManageInfo(roundId);
-        return roundInfo;
-    } catch (error) {
-        throw new Error(`라운드 정보 확인 실패: ${error.message}`);
-    }
-}
-
-/**
- * @notice 라운드의 정산 정보를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 정산 정보 (depositedAmount, refundedAmount)
- */
-async function getRoundSettleInfo(main, roundId) {
-    try {
-        const settleInfo = await main.roundSettleManageInfo(roundId);
-        return settleInfo;
-    } catch (error) {
-        throw new Error(`라운드 정산 정보 확인 실패: ${error.message}`);
-    }
-}
-
-/**
  * @notice 환불 가능 여부를 확인한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} roundId 확인할 라운드 ID
- * @returns 환불 가능 여부 (currentTime, startedAt, timeElapsed, isAvailable)
+ * @returns 환불 가능 여부 (remainTime, isAvailable, reason)
  */
 async function checkRefundAvailability(main, roundId) {
     try {
-        const roundInfo = await getRoundInfo(main, roundId);
-        const startedAt = roundInfo.startedAt;
-        const currentTime = Math.floor(Date.now() / 1000);
-        
-        // Types.ROUND_REFUND_AVAIL_TIME은 24시간 (86400초)
-        const ROUND_REFUND_AVAIL_TIME = 86400;
-        const timeElapsed = currentTime - startedAt;
-        
+        // Main.sol의 getRemainTimeRefund 함수 호출
+        const remainTime = await main.getRemainTimeRefund();
+        // 0xffffffff는 status가 Claiming/Ended 상태라는 뜻 (환불 불가)
+        if (remainTime === 0xffffffffn) {
+            return {
+                remainTime: remainTime.toString(),
+                isAvailable: false,
+                reason: "Status is Claiming/Ended"
+            };
+        }
+
+        // 0이면 호출 가능, 0이 아닌 값은 아직 시간이 덜 됨
+        const isAvailable = remainTime === 0n;
+
         return {
-            currentTime,
-            startedAt,
-            timeElapsed,
-            isAvailable: timeElapsed > ROUND_REFUND_AVAIL_TIME
+            remainTime: remainTime.toString(),
+            isAvailable: isAvailable,
+            reason: isAvailable ? "Ready to refund" : "Time not elapsed yet"
         };
     } catch (error) {
         throw new Error(`환불 가능 시간 확인 실패: ${error.message}`);
@@ -186,7 +146,9 @@ async function checkRefundAvailability(main, roundId) {
  */
 async function executeRefund(main, wallet, roundId, agentId) {
     try {
-        const refundTx = await main.connect(wallet).refund(roundId, agentId);
+        const refundTx = await main.connect(wallet).refund(roundId, agentId, {
+            gasLimit: 500000
+        });
         const receipt = await refundTx.wait();
         
         // Gas 사용량 출력
@@ -197,28 +159,6 @@ async function executeRefund(main, wallet, roundId, agentId) {
     } catch (error) {
         throw new Error(`refund 실행 실패: ${error.message}`);
     }
-}
-
-/**
- * @notice refund 결과를 포맷팅한다.
- * @param {*} wallet 환불자 지갑
- * @param {*} refundTx refund 트랜잭션
- * @param {*} receipt 트랜잭션 영수증
- * @param {*} roundId 라운드 ID
- * @param {*} agentId Agent ID
- * @param {*} contractStatus 컨트랙트 상태
- * @returns 포맷팅된 refund 결과
- */
-function formatRefundResult(wallet, refundTx, receipt, roundId, agentId, contractStatus) {
-    return {
-        refunder: wallet.address,
-        transactionHash: refundTx.hash,
-        blockNumber: receipt.blockNumber,
-        roundId: roundId.toString(),
-        agentId: agentId.toString(),
-        refundTime: new Date().toISOString(),
-        contractStatus: contractStatus
-    };
 }
 
 // 메인 refund 함수 (순수 함수)
@@ -240,39 +180,50 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
                 throw new Error("❌ .env 파일에 PRIVATE_KEY가 설정되지 않았습니다.");
             }
             
-            provider = new JsonRpcProvider(providerUrl);
-            wallet = new Wallet(privateKey, provider);
+            provider = new ethers.JsonRpcProvider(providerUrl);
+            wallet = new ethers.Wallet(privateKey, provider);
         }
 
         // 2. 컨트랙트 초기화
         const main = await initializeContracts(mainAddress, provider);
         
-        // 3. 컨트랙트 상태 확인
-        const contractStatus = await getContractStatus(main);
-        
-        // 4. 라운드 상태 확인
-        const roundStatus = await getRoundStatus(main, roundId);
+        // 3. 라운드번호 확인
+        const currentRoundId = await getRoundId(main);
         
         // 5. Agent NFT 소유권 확인
-        const ownership = await checkAgentOwnership(main, wallet.address, agentId);
+        const ownership = await checkAgentOwnership(main, wallet.address, agentId, provider);
+        
+        // Agent NFT 존재 여부 확인
+        if (!ownership.exists) {
+            throw new Error(`❌ Agent NFT #${agentId}가 존재하지 않습니다.`);
+        }
+        
+        // 소유권 검사
+        if (!ownership.isOwner) {
+            throw new Error(`❌ Agent NFT #${agentId}의 소유자가 아닙니다. 소유자: ${ownership.owner}`);
+        }
         
         // 6. Agent NFT 정보 확인
-        const agentInfo = await getAgentInfo(main, agentId);
-        
-        // 7. 라운드 정보 확인
-        const roundInfo = await getRoundInfo(main, roundId);
-        
-        // 8. 라운드 정산 정보 확인
-        const settleInfo = await getRoundSettleInfo(main, roundId);
+        const agentInfo = await getAgentInfo(main, agentId, provider);
         
         // 9. 환불 가능 시간 확인
         const availability = await checkRefundAvailability(main, roundId);
+        console.log("⏱️ Refund availability:", availability);
         
         // 10. refund 실행
         const { transaction: refundTx, receipt } = await executeRefund(main, wallet, roundId, agentId);
 
         // 11. 결과 포맷팅
-        const result = formatRefundResult(wallet, refundTx, receipt, roundId, agentId, contractStatus);
+        const result = {
+            refunder: wallet.address,
+            transactionHash: refundTx.hash,
+            blockNumber: receipt.blockNumber,
+            roundId: roundId.toString(),
+            agentId: agentId.toString(),
+            agentType: agentInfo.typeHash.toString(),
+            refundAmount: "1000000000000000000", // 1 STT (AGENT_MINTING_FEE)
+            refundTime: new Date().toISOString()
+        };
 
         return result;
 
@@ -293,6 +244,8 @@ function logResult(result) {
     console.log("  - 블록 번호:", result.blockNumber);
     console.log("  - 라운드 ID:", result.roundId);
     console.log("  - Agent ID:", result.agentId);
+    console.log("  - Agent Type:", result.agentType);
+    console.log("  - 환불 금액:", result.refundAmount, "STT");
     console.log("  - 환불 시간:", result.refundTime);
 }
 

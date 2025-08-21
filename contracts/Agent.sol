@@ -124,8 +124,8 @@ contract AgentNFT is ERC721URIStorage, Ownable {
         address _to,
         uint256 _roundId,
         uint256[] memory itemPartsIds
-    ) external onlyMain {
-        uint256 tokenId = ++totalSupply;
+    ) external onlyMain returns (uint256 tokenId) {
+        tokenId = ++totalSupply;
         // 민트
         _mint(_to, tokenId);
         emit Minted(

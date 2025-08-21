@@ -29,22 +29,16 @@ const {
     logResult: logRefundResult
 } = require('./libs/main/refund');
 
-const { startRound } = require('./libs/main/startRound');
-const { settleRound } = require('./libs/main/settleRound');
-const { settleRoundForced } = require('./libs/main/settleRounForced');
+const { startRound } = require('./libs/main/admin/startRound');
+const { settleRound } = require('./libs/main/admin/settleRound');
+const { endRound } = require('./libs/main/admin/endRound');
+const { settleRoundForced } = require('./libs/main/admin/settleRounForced');
 
 const { 
     faucet,
     logResult: logFaucetResult
 } = require('./libs/stt/faucet');
 
-const { 
-    readMain, 
-    logContractInfo, 
-    logRoundStatusInfo, 
-    logSttBalance, 
-    logReadMainResult 
-} = require('./libs/main/readMain');
 
 async function main() {
     const args = process.argv.slice(2);
@@ -60,6 +54,7 @@ async function main() {
         console.error("  main:startRound");
         console.error("  main:settleRound <randSeed>");
         console.error("  main:settleRoundForced <winnerHash>");
+        console.error("  main:endRound <round_id>");
         console.error("  main:roundInfo");
         console.error("  stt:faucet <to_address> <amount_in_ether>");
         console.error("예시:");
@@ -71,6 +66,7 @@ async function main() {
         console.error("  node cli.js main:startRound");
         console.error("  node cli.js main:settleRound 1234567890");
         console.error("  node cli.js main:settleRoundForced 0x1234567890abcdef...");
+        console.error("  node cli.js main:endRound 1");
         process.exit(1);
     }
 
@@ -202,7 +198,6 @@ async function main() {
             const result = await refund(mainAddress, roundId, agentId);
             
             // 결과 로깅
-            logMainContractStatus4(result.contractStatus);
             logRefundResult(result);
             
             console.log("✅ main:refund 액션이 완료되었습니다.");
@@ -315,7 +310,8 @@ async function main() {
             
             console.log("✅ main:settleRoundForced 액션이 완료되었습니다.");
 
-        } else if (action === 'main:roundInfo') {
+        } else if (action === 'main:endRound') {
+            console.log("❌❌❌❌❌❌❌❌❌ 본 Command는 admin 전용입니당!");
             const mainAddress = deploymentInfo.contracts.main;
 
             if (!mainAddress) {
@@ -323,17 +319,27 @@ async function main() {
                 process.exit(1);
             }
 
-            console.log("🎯 Main 컨트랙트 주소:", mainAddress);
+            if (actionArgs.length !== 1) {
+                console.error("❌ endRound는 종료할 라운드 ID가 필요합니다.");
+                console.error("사용법: node cli.js main:endRound <round_id>");
+                process.exit(1);
+            }
 
-            const result = await readMain(mainAddress);
-            
-            // 결과 로깅
-            logContractInfo(result.contractInfo);
-            logRoundStatusInfo(result.roundStatusInfo);
-            logSttBalance(result.sttBalance, result.walletAddress);
-            logReadMainResult(result);
-            
-            console.log("✅ main:roundInfo 액션이 완료되었습니다.");
+            const roundId = BigInt(actionArgs[0]);
+
+            console.log("🎯 Main 컨트랙트 주소:", mainAddress);
+            console.log("🎯 종료할 라운드 ID:", roundId.toString());
+
+            const result = await endRound(mainAddress, roundId);
+
+            // 결과 출력
+            console.log("✅ endRound 완료:");
+            console.log("  - 라운드 ID:", result.roundId);
+            console.log("  - 이전 상태:", result.previousStatus);
+            console.log("  - 새로운 상태:", result.newStatus);
+            console.log("  - 트랜잭션 해시:", result.transaction.hash);
+
+            console.log("✅ main:endRound 액션이 완료되었습니다.");
 
         } else if (action === 'stt:faucet') {
             const sttAddress = deploymentInfo.contracts.sttToken;

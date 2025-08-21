@@ -22,8 +22,8 @@ describe("Rng Contract", function () {
         });
 
         it("상수값들이 올바르게 설정되어야 한다", async function () {
-            expect(await rng.ENTROPY_FACTOR1()).to.equal(6);
-            expect(await rng.ENTROPY_FACTOR2()).to.equal(16);
+            expect(await rng.ENTROPY_FACTOR1()).to.equal(65);
+            expect(await rng.ENTROPY_FACTOR2()).to.equal(69);
         });
     });
 
@@ -119,12 +119,12 @@ describe("Rng Contract", function () {
     });
 
     describe("상수값 검증", function () {
-        it("ENTROPY_FACTOR1이 6이어야 한다", async function () {
-            expect(await rng.ENTROPY_FACTOR1()).to.equal(6);
+        it("ENTROPY_FACTOR1이 65이어야 한다", async function () {
+            expect(await rng.ENTROPY_FACTOR1()).to.equal(65);
         });
 
-        it("ENTROPY_FACTOR2가 16이어야 한다", async function () {
-            expect(await rng.ENTROPY_FACTOR2()).to.equal(16);
+        it("ENTROPY_FACTOR2가 69이어야 한다", async function () {
+            expect(await rng.ENTROPY_FACTOR2()).to.equal(69);
         });
     });
 

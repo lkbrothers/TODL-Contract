@@ -183,30 +183,6 @@ async function executeClaim(main, wallet, roundId, agentId) {
     }
 }
 
-/**
- * @notice claim 결과를 포맷팅한다.
- * @param {*} wallet 수령자 지갑
- * @param {*} claimTx claim 트랜잭션
- * @param {*} receipt 트랜잭션 영수증
- * @param {*} roundId 라운드 ID
- * @param {*} agentId Agent ID
- * @param {*} contractStatus 컨트랙트 상태
- * @returns 포맷팅된 claim 결과
- */
-function formatClaimResult(wallet, claimTx, receipt, roundId, agentId, contractStatus) {
-    return {
-        claimer: wallet.address,
-        transactionHash: claimTx.hash,
-        blockNumber: receipt.blockNumber,
-        roundId: roundId.toString(),
-        agentId: agentId.toString(),
-        claimTime: new Date().toISOString(),
-        contractStatus: contractStatus
-    };
-}
-
-
-
 // 메인 claim 함수 (순수 함수)
 async function claim(mainAddress, roundId, agentId, customProvider = null, customWallet = null) {
     try {

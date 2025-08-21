@@ -49,21 +49,6 @@ async function getRoundStatus(main, roundId) {
 }
 
 /**
- * @notice 라운드의 상세 정보를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 상세 정보
- */
-async function getRoundInfo(main, roundId) {
-    try {
-        const roundInfo = await main.roundStatusManageInfo(roundId);
-        return roundInfo;
-    } catch (error) {
-        throw new Error(`라운드 정보 확인 실패: ${error.message}`);
-    }
-}
-
-/**
  * @notice 라운드 종료 가능 여부를 확인한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} roundId 확인할 라운드 ID
