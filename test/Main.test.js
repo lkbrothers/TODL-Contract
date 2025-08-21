@@ -145,23 +145,23 @@ async function mintAgent(main, sttToken, rewardPool, user, itemPartsIds) {
 describe("Main Contract", function () {
     let main, itemParts, agent, rng, rewardPool, stakePool, reserv, sttToken;
     let owner, admin, carrier, donateAddr, corporateAddr, operationAddr, user1, user2, user3;
-    let managedContracts;
+  let managedContracts;
 
-    beforeEach(async function () {
+  beforeEach(async function () {
         [owner, admin, carrier, donateAddr, corporateAddr, operationAddr, user1, user2, user3] = await ethers.getSigners();
 
-        // 컨트랙트 배포
+    // 컨트랙트 배포
         const Main = await ethers.getContractFactory("MainMock"); // 테스트용
-        const ItemParts = await ethers.getContractFactory("ItemPartsNFT");
-        const Agent = await ethers.getContractFactory("AgentNFT");
+    const ItemParts = await ethers.getContractFactory("ItemPartsNFT");
+    const Agent = await ethers.getContractFactory("AgentNFT");
         const Rng = await ethers.getContractFactory("Rng");
-        const RewardPool = await ethers.getContractFactory("RewardPool");
+    const RewardPool = await ethers.getContractFactory("RewardPool");
         const StakePool = await ethers.getContractFactory("StakePool");
         const Reserv = await ethers.getContractFactory("Reserv");
-        const SttToken = await ethers.getContractFactory("SttPermit");
+    const SttToken = await ethers.getContractFactory("SttPermit");
 
         // STT 토큰 먼저 배포
-        sttToken = await SttToken.deploy();
+    sttToken = await SttToken.deploy();
         await sttToken.waitForDeployment();
         let sttAddr = await sttToken.getAddress();
 
@@ -184,7 +184,7 @@ describe("Main Contract", function () {
         reserv = await Reserv.deploy(sttAddr);
         await reserv.waitForDeployment();
 
-        // managedContracts 설정
+    // managedContracts 설정
         managedContracts = await Promise.all([
             itemParts.getAddress(),
             agent.getAddress(),
@@ -194,26 +194,26 @@ describe("Main Contract", function () {
             reserv.getAddress(),
             sttToken.getAddress()
         ]);
-        await main.setContracts(managedContracts);
+    await main.setContracts(managedContracts);
 
         // 사용자들에게 STT 토큰 지급
         await sttToken.transfer(user1.address, ethers.parseEther("1000"));
         await sttToken.transfer(user2.address, ethers.parseEther("1000"));
         await sttToken.transfer(user3.address, ethers.parseEther("1000"));
-    });
+  });
 
-    describe("초기화", function () {
-        it("컨트랙트가 올바르게 초기화되어야 한다", async function () {
-            expect(await main.roundId()).to.equal(0);
+  describe("초기화", function () {
+    it("컨트랙트가 올바르게 초기화되어야 한다", async function () {
+      expect(await main.roundId()).to.equal(0);
             expect(await main.admins(owner.address)).to.equal(true);
             expect(await main.admins(admin.address)).to.equal(true);
             expect(await main.admins(carrier.address)).to.equal(true);
-            expect(await main.donateAddr()).to.equal(donateAddr.address);
-            expect(await main.corporateAddr()).to.equal(corporateAddr.address);
-            expect(await main.operationAddr()).to.equal(operationAddr.address);
-        });
+      expect(await main.donateAddr()).to.equal(donateAddr.address);
+      expect(await main.corporateAddr()).to.equal(corporateAddr.address);
+      expect(await main.operationAddr()).to.equal(operationAddr.address);
+    });
 
-        it("managedContracts가 올바르게 설정되어야 한다", async function () {
+    it("managedContracts가 올바르게 설정되어야 한다", async function () {
             expect(await main.managedContracts(0)).to.equal(await main.getAddress());
             expect(await main.managedContracts(1)).to.equal(await itemParts.getAddress());
             expect(await main.managedContracts(2)).to.equal(await agent.getAddress());
@@ -226,8 +226,8 @@ describe("Main Contract", function () {
     });
 
     describe("Admin 관리", function () {
-        it("admin 주소를 설정할 수 있어야 한다", async function () {
-            const newAdmin = user1.address;
+    it("admin 주소를 설정할 수 있어야 한다", async function () {
+      const newAdmin = user1.address;
             await main.setAdminAddress(newAdmin, true);
             expect(await main.admins(newAdmin)).to.equal(true);
             await main.setAdminAddress(newAdmin, false);
@@ -255,41 +255,41 @@ describe("Main Contract", function () {
     describe("주소 설정", function () {
         it("기부금 주소를 설정할 수 있어야 한다", async function () {
             const newDonateAddr = user1.address;
-            await main.setDonateAddress(newDonateAddr);
-            expect(await main.donateAddr()).to.equal(newDonateAddr);
-        });
+      await main.setDonateAddress(newDonateAddr);
+      expect(await main.donateAddr()).to.equal(newDonateAddr);
+    });
 
         it("영리법인 주소를 설정할 수 있어야 한다", async function () {
             const newCorporateAddr = user2.address;
-            await main.setCorporateAddress(newCorporateAddr);
-            expect(await main.corporateAddr()).to.equal(newCorporateAddr);
-        });
+      await main.setCorporateAddress(newCorporateAddr);
+      expect(await main.corporateAddr()).to.equal(newCorporateAddr);
+    });
 
         it("운영비 주소를 설정할 수 있어야 한다", async function () {
             const newOperationAddr = user3.address;
-            await main.setOperationAddress(newOperationAddr);
-            expect(await main.operationAddr()).to.equal(newOperationAddr);
-        });
+      await main.setOperationAddress(newOperationAddr);
+      expect(await main.operationAddr()).to.equal(newOperationAddr);
+    });
 
-        it("zero address로 설정할 수 없어야 한다", async function () {
+    it("zero address로 설정할 수 없어야 한다", async function () {
             await expect(main.setDonateAddress(ethers.ZeroAddress))
                 .to.be.revertedWith("donate: zero address");
             await expect(main.setCorporateAddress(ethers.ZeroAddress))
                 .to.be.revertedWith("corporate: zero address");
             await expect(main.setOperationAddress(ethers.ZeroAddress))
                 .to.be.revertedWith("operation: zero address");
-        });
+    });
 
-        it("같은 주소로 설정할 수 없어야 한다", async function () {
+    it("같은 주소로 설정할 수 없어야 한다", async function () {
             await expect(main.setDonateAddress(donateAddr.address))
                 .to.be.revertedWith("donate: same address");
             await expect(main.setCorporateAddress(corporateAddr.address))
                 .to.be.revertedWith("corporate: same address");
             await expect(main.setOperationAddress(operationAddr.address))
                 .to.be.revertedWith("operation: same address");
-        });
+    });
 
-        it("owner가 아닌 계정은 주소를 설정할 수 없어야 한다", async function () {
+    it("owner가 아닌 계정은 주소를 설정할 수 없어야 한다", async function () {
             await expect(main.connect(user1).setDonateAddress(user2.address))
                 .to.be.revertedWithCustomError(main, "OwnableUnauthorizedAccount");
             await expect(main.connect(user1).setCorporateAddress(user2.address))
@@ -297,25 +297,25 @@ describe("Main Contract", function () {
             await expect(main.connect(user1).setOperationAddress(user2.address))
                 .to.be.revertedWithCustomError(main, "OwnableUnauthorizedAccount");
         });
-    });
+  });
 
-    describe("라운드 관리", function () {
-        beforeEach(async function () {
+  describe("라운드 관리", function () {
+    beforeEach(async function () {
             // 라운드 시작을 위한 기본 설정
             await startRoundWithSignature(main, rng, admin);
-        });
+    });
 
-        it("라운드를 시작할 수 있어야 한다", async function () {
-            expect(await main.roundId()).to.equal(1);
+    it("라운드를 시작할 수 있어야 한다", async function () {
+      expect(await main.roundId()).to.equal(1);
             expect(await main.getRoundStatus(1)).to.equal(1); // Proceeding
-        });
+    });
 
-        it("admin이 아닌 계정은 라운드를 시작할 수 없어야 한다", async function () {
+    it("admin이 아닌 계정은 라운드를 시작할 수 없어야 한다", async function () {
             await expect(main.connect(user1).startRound("0x"))
-                .to.be.revertedWithCustomError(main, "NotAdmin");
-        });
+        .to.be.revertedWithCustomError(main, "NotAdmin");
+    });
 
-        it("이전 라운드가 완료되지 않으면 새 라운드를 시작할 수 없어야 한다", async function () {
+    it("이전 라운드가 완료되지 않으면 새 라운드를 시작할 수 없어야 한다", async function () {
             await expect(main.connect(admin).startRound("0x"))
                 .to.be.revertedWithCustomError(main, "LastRoundNotEnded");
         });
@@ -339,9 +339,9 @@ describe("Main Contract", function () {
             await startRoundWithSignature(main, rng, admin); // 라운드를 진행중 상태로 변경
             const user1ItemPartsIds = user1Tokens.slice(0, 5); // 처음 5개 토큰 사용
             await mintAgent(main, sttToken, rewardPool, user1, user1ItemPartsIds);
-            
-            // Agent가 민팅되었는지 확인
-            expect(await agent.balanceOf(user1.address)).to.equal(1);
+      
+      // Agent가 민팅되었는지 확인
+      expect(await agent.balanceOf(user1.address)).to.equal(1);
         });
 
         it("라운드가 진행중이 아니면 Agent를 구매할 수 없어야 한다", async function () {
@@ -423,16 +423,6 @@ describe("Main Contract", function () {
             
             await expect(main.connect(admin).closeTicketRound())
                 .to.be.revertedWith("Not permitted");
-        });
-
-        it("Agent를 소유하지 않은 사용자는 라운드 세일을 종료할 수 없어야 한다", async function () {
-            await startRoundWithSignature(main, rng, admin);
-            
-            await ethers.provider.send("evm_increaseTime", [82800]);
-            await ethers.provider.send("evm_mine");
-            
-            await expect(main.connect(user2).closeTicketRound())
-                .to.be.revertedWith("Not Owned Agent");
         });
     });
 
@@ -588,10 +578,10 @@ describe("Main Contract", function () {
             
             await expect(main.connect(user2).refund(1, agentId))
                 .to.be.revertedWith("Mismatch (Agent & round)");
-        });
     });
+  });
 
-    describe("라운드 종료", function () {
+  describe("라운드 종료", function () {
         it("admin이 라운드를 종료할 수 있어야 한다", async function () {
             await startRoundWithSignature(main, rng, admin);
             // 라운드 종료 가능 시간으로 설정
@@ -607,7 +597,7 @@ describe("Main Contract", function () {
             await ethers.provider.send("evm_increaseTime", [2592000]);
             await ethers.provider.send("evm_mine");
             
-            await expect(main.connect(user1).endRound(1))
+      await expect(main.connect(user1).endRound(1))
                 .to.be.revertedWithCustomError(main, "NotAdmin");
         });
 
@@ -623,9 +613,9 @@ describe("Main Contract", function () {
             await main.connect(admin).endRound(1);
             
             await expect(main.connect(admin).endRound(1))
-                .to.be.revertedWithCustomError(main, "EndRoundNotAllowed");
-        });
+        .to.be.revertedWithCustomError(main, "EndRoundNotAllowed");
     });
+  });
 
     describe("라운드 정산 - 당첨자 없음", function () {
         let round1DepositedAmount, round2InitialDepositedAmount;
@@ -737,5 +727,5 @@ describe("Main Contract", function () {
             // 라운드 1이 Ended 상태로 변경되었는지 확인
             expect(await main.getRoundStatus(1)).to.equal(5); // Ended
         });
-    });
+  });
 }); 

@@ -76,7 +76,7 @@ async function settleRound(mainAddress, randSeed, customProvider = null, customW
         }
 
         // 2. 컨트랙트 초기화
-        const MainArtifact = require('../../../artifacts/contracts/Main.sol/Main.json');
+        const MainArtifact = require('../../../../artifacts/contracts/Main.sol/Main.json');
         const main = new ethers.Contract(mainAddress, MainArtifact.abi, provider);
 
         // 3. 라운드번호 확인

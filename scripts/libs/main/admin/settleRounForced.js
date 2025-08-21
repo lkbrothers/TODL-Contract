@@ -77,7 +77,7 @@ async function settleRoundForced(mainAddress, winnerHash, customProvider = null,
         }
 
         // 2. 컨트랙트 초기화
-        const MainArtifact = require('../../../artifacts/contracts/mocks/MainMock.sol/MainMock.json');
+        const MainArtifact = require('../../../../artifacts/contracts/mocks/MainMock.sol/MainMock.json');
         const main = new ethers.Contract(mainAddress, MainArtifact.abi, provider);
 
         // 3. 라운드번호 확인

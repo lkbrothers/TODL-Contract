@@ -34,21 +34,6 @@ async function getRoundId(main) {
 }
 
 /**
- * @notice 특정 라운드의 상태를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 상태 (0: NotStarted, 1: Proceeding, 2: Drawing, 3: Claiming, 4: Refunding, 5: Ended)
- */
-async function getRoundStatus(main, roundId) {
-    try {
-        const status = await main.getRoundStatus(roundId);
-        return status;
-    } catch (error) {
-        throw new Error(`라운드 상태 확인 실패: ${error.message}`);
-    }
-}
-
-/**
  * @notice Agent NFT의 소유권을 확인한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} walletAddress 확인할 지갑 주소
@@ -120,56 +105,31 @@ async function getAgentInfo(main, agentId, provider) {
 }
 
 /**
- * @notice 라운드의 상세 정보를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 상세 정보
- */
-async function getRoundInfo(main, roundId) {
-    try {
-        const roundInfo = await main.roundStatusManageInfo(roundId);
-        return roundInfo;
-    } catch (error) {
-        throw new Error(`라운드 정보 확인 실패: ${error.message}`);
-    }
-}
-
-/**
- * @notice 라운드의 정산 정보를 반환한다.
- * @param {*} main Main 컨트랙트 주소
- * @param {*} roundId 확인할 라운드 ID
- * @returns 라운드 정산 정보 (depositedAmount, refundedAmount)
- */
-async function getRoundSettleInfo(main, roundId) {
-    try {
-        const settleInfo = await main.roundSettleManageInfo(roundId);
-        return settleInfo;
-    } catch (error) {
-        throw new Error(`라운드 정산 정보 확인 실패: ${error.message}`);
-    }
-}
-
-/**
  * @notice 환불 가능 여부를 확인한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} roundId 확인할 라운드 ID
- * @returns 환불 가능 여부 (currentTime, startedAt, timeElapsed, isAvailable)
+ * @returns 환불 가능 여부 (remainTime, isAvailable, reason)
  */
 async function checkRefundAvailability(main, roundId) {
     try {
-        const roundInfo = await getRoundInfo(main, roundId);
-        const startedAt = roundInfo.startedAt;
-        const currentTime = Math.floor(Date.now() / 1000);
-        
-        // Types.ROUND_REFUND_AVAIL_TIME은 24시간 (86400초)
-        const ROUND_REFUND_AVAIL_TIME = 86400;
-        const timeElapsed = currentTime - startedAt;
-        
+        // Main.sol의 getRemainTimeRefund 함수 호출
+        const remainTime = await main.getRemainTimeRefund();
+        // 0xffffffff는 status가 Claiming/Ended 상태라는 뜻 (환불 불가)
+        if (remainTime === 0xffffffffn) {
+            return {
+                remainTime: remainTime.toString(),
+                isAvailable: false,
+                reason: "Status is Claiming/Ended"
+            };
+        }
+
+        // 0이면 호출 가능, 0이 아닌 값은 아직 시간이 덜 됨
+        const isAvailable = remainTime === 0n;
+
         return {
-            currentTime,
-            startedAt,
-            timeElapsed,
-            isAvailable: timeElapsed > ROUND_REFUND_AVAIL_TIME
+            remainTime: remainTime.toString(),
+            isAvailable: isAvailable,
+            reason: isAvailable ? "Ready to refund" : "Time not elapsed yet"
         };
     } catch (error) {
         throw new Error(`환불 가능 시간 확인 실패: ${error.message}`);
@@ -230,12 +190,6 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
         // 3. 라운드번호 확인
         const currentRoundId = await getRoundId(main);
         
-        // 4. 라운드 상태 확인
-        // const roundStatus = await getRoundStatus(main, roundId);
-        // if(roundStatus != 4n) {
-        //     throw new Error("❌ 현재 라운드상태가 \"Refunding\"이 아닙니다.");
-        // }
-        
         // 5. Agent NFT 소유권 확인
         const ownership = await checkAgentOwnership(main, wallet.address, agentId, provider);
         
@@ -253,7 +207,8 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
         const agentInfo = await getAgentInfo(main, agentId, provider);
         
         // 9. 환불 가능 시간 확인
-        // const availability = await checkRefundAvailability(main, roundId);
+        const availability = await checkRefundAvailability(main, roundId);
+        console.log("⏱️ Refund availability:", availability);
         
         // 10. refund 실행
         const { transaction: refundTx, receipt } = await executeRefund(main, wallet, roundId, agentId);

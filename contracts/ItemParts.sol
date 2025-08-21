@@ -214,6 +214,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
     /**
      * @notice ItemParts NFT 민팅 함수
      * @dev 한 번에 mintAtTime 개수만큼 민팅
+     * Entropies: msg.sender, nonces, chainId
      */
     function mint() external {
         uint256 today = block.timestamp / 1 days;
@@ -224,7 +225,7 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         if(mintedTodayCount[msg.sender] > maxMintsPerDay) {
             revert DailyLimitsExceeded(block.timestamp);
         }
-        bytes32 hash = keccak256(abi.encode(msg.sender, mintEntropy[msg.sender])); // Entropies: msg.sender, nonces
+        bytes32 hash = keccak256(abi.encode(msg.sender, mintEntropy[msg.sender], block.chainid));
         mintEntropy[msg.sender]++;
         for(uint i = 0; i < mintAtTime; i++) {
             uint256 partIndex = uint8(hash[0+i]) % parts.length;
@@ -321,6 +322,14 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
                 )
             )
         );
+    }
+
+    /**
+     * @notice 현재 블록체인의 chainID를 반환한다.
+     * @return chainID
+     */
+    function getChainId() external view returns (uint256) {
+        return block.chainid;
     }
 
     /**

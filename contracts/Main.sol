@@ -606,10 +606,13 @@ contract Main is Ownable {
             if(roundStatusInfo.status == Types.RoundStatus.Proceeding || roundStatusInfo.status == Types.RoundStatus.Drawing) {
                 /// testmode (hlibbc)
                 // if(currentTime - startedTimeEstimated > Types.ROUND_REFUND_AVAIL_TIME) {
+                ///
                     roundStatusInfo.refundedAt = currentTime;
                     roundStatusInfo.status = Types.RoundStatus.Refunding;
                     emit RoundRefunded(_roundId);
+                /// testmode (hlibbc)
                 // }
+                ///
             }
             require(roundStatusInfo.status == Types.RoundStatus.Refunding, "Round is not Refunding");
             if(currentTime - startedTimeEstimated > payoutLimitTime) {
@@ -640,17 +643,38 @@ contract Main is Ownable {
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         if(roundStatusInfo.status == Types.RoundStatus.Proceeding) {
             uint64 currentTime = uint64(block.timestamp);
-            if(currentTime - roundStatusInfo.startedAt < Types.ROUND_PERIOD) {
-                uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-                uint64 elapsedTime = currentTime - startedTimeEstimated;
-                if(uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) > elapsedTime) {
-                    remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
-                } else {
-                    remainTime = 0;
-                }
+            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+            uint64 elapsedTime = currentTime - startedTimeEstimated;
+            if(uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) > elapsedTime) {
+                remainTime = uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME) - elapsedTime;
             } else {
                 remainTime = 0;
             }
+        }
+    }
+
+    /**
+     * @notice 현재 라운드에서 Refund가 가능한 남은시간을 조회한다.
+     * @dev 라운드가 proceeding 혹은 drawing 상태일 경우, 남은시간이 반환된다.
+     * 남은시간 = 2 days - (현재시각-startAt (UTC00:00으로 절삭된 시각))
+     * 라운드가 refund 상태일 경우, 0이 반환된다.
+     * 라운드가 claiming 혹은 Ended 상태일 경우, 0xffffffff가 반환된다.
+     * @return remainTime Refund가 가능한 남은시간
+     */
+    function getRemainTimeRefund() external view returns (uint256 remainTime) {
+        remainTime = 0xffffffff;
+        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
+        if(roundStatusInfo.status == Types.RoundStatus.Proceeding || roundStatusInfo.status == Types.RoundStatus.Drawing) {
+            uint64 currentTime = uint64(block.timestamp);
+            uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+            uint64 elapsedTime = currentTime - startedTimeEstimated;
+            if(uint64(Types.ROUND_REFUND_AVAIL_TIME) > elapsedTime) {
+                remainTime = uint64(Types.ROUND_REFUND_AVAIL_TIME) - elapsedTime;
+            } else {
+                remainTime = 0;
+            }
+        } else if(roundStatusInfo.status == Types.RoundStatus.Refunding) {
+            remainTime = 0;
         }
     }
     
@@ -842,7 +866,8 @@ contract Main is Ownable {
             uint256 corporateAmount = roundSettleInfo.corporateAmount;
             uint256 operationAmount = roundSettleInfo.operationAmount;
             uint256 stakedAmount = roundSettleInfo.stakedAmount;
-            uint256 spentAmount = claimedAmount + donateAmount + corporateAmount + operationAmount + stakedAmount;
+            uint256 refundedAmount = roundSettleInfo.refundedAmount;
+            uint256 spentAmount = claimedAmount + donateAmount + corporateAmount + operationAmount + stakedAmount + refundedAmount;
             if(depositedAmount < spentAmount) {
                 revert FatalAmountDiscrepancy(
                     _roundId,
