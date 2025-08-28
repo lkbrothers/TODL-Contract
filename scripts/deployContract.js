@@ -61,10 +61,10 @@ async function main() {
             await waitIfNeeded();
         }
         // 2. Main 컨트랙트 배포
-        // console.log("\n2️⃣ Main 컨트랙트 배포 중...");
-        // const Main = await ethers.getContractFactory("Main");
-        console.log("\n2️⃣ MainMock 컨트랙트 배포 중...");
-        const Main = await ethers.getContractFactory("MainMock"); // 당첨자 지정을 위해 Mock deploy (리얼버전에서는 반드시 빠져야 한다!)
+        console.log("\n2️⃣ Main 컨트랙트 배포 중...");
+        const Main = await ethers.getContractFactory("Main");
+        // console.log("\n2️⃣ MainMock 컨트랙트 배포 중...");
+        // const Main = await ethers.getContractFactory("MainMock"); // 당첨자 지정을 위해 Mock deploy (리얼버전에서는 반드시 빠져야 한다!)
         const main = await Main.connect(ownerWallet).deploy(
             [admin, carrier],
             donateAddr,

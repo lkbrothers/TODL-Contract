@@ -356,15 +356,15 @@ contract Main is Ownable {
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         require(roundStatusInfo.status == Types.RoundStatus.Proceeding, "Round is not proceeding");
         /// testmode (hlibbc)
-        // uint64 currentTime = uint64(block.timestamp);
-        // uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-        // if(currentTime - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
-        //     revert CloseTicketRoundNotReady(
-        //         currentTime, 
-        //         startedTimeEstimated, 
-        //         (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
-        //     );
-        // }
+        uint64 currentTime = uint64(block.timestamp);
+        uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+        if(currentTime - startedTimeEstimated < uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME)) {
+            revert CloseTicketRoundNotReady(
+                currentTime, 
+                startedTimeEstimated, 
+                (startedTimeEstimated + uint64(Types.ROUND_CLOSETICKET_AVAIL_TIME))
+            );
+        }
 
         (bool success, ) = managedContracts[uint8(Types.ContractTags.Rng)].call(
             abi.encodeWithSelector(
@@ -460,10 +460,10 @@ contract Main is Ownable {
         }
         uint64 currentTime = uint64(block.timestamp);
         /// testmode (hlibbc)
-        // uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
-        // if(currentTime - startedTimeEstimated < payoutLimitTime) {
-        //     revert CannotEndRoundYet(_roundId, startedTimeEstimated, currentTime);
-        // }
+        uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
+        if(currentTime - startedTimeEstimated < payoutLimitTime) {
+            revert CannotEndRoundYet(_roundId, startedTimeEstimated, currentTime);
+        }
         _carryingOutProc(_roundId);
         roundStatusInfo.endedAt = currentTime;
         roundStatusInfo.status = Types.RoundStatus.Ended;
@@ -605,13 +605,13 @@ contract Main is Ownable {
             uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
             if(roundStatusInfo.status == Types.RoundStatus.Proceeding || roundStatusInfo.status == Types.RoundStatus.Drawing) {
                 /// testmode (hlibbc)
-                // if(currentTime - startedTimeEstimated > Types.ROUND_REFUND_AVAIL_TIME) {
+                if(currentTime - startedTimeEstimated > Types.ROUND_REFUND_AVAIL_TIME) {
                 ///
                     roundStatusInfo.refundedAt = currentTime;
                     roundStatusInfo.status = Types.RoundStatus.Refunding;
                     emit RoundRefunded(_roundId);
                 /// testmode (hlibbc)
-                // }
+                }
                 ///
             }
             require(roundStatusInfo.status == Types.RoundStatus.Refunding, "Round is not Refunding");

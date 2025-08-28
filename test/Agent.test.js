@@ -30,7 +30,7 @@ describe("Agent NFT Contract", function () {
         it("컨트랙트가 올바르게 초기화되어야 한다", async function () {
             expect(await agent.mainAddr()).to.equal(mockMainAddr);
             expect(await agent.totalSupply()).to.equal(0);
-            expect(await agent.baseUri()).to.equal("https://dev.todl.fun/api/file-download/json/");
+            expect(await agent.baseUri()).to.equal("https://todl.fun/api/file-download/json/");
             expect(await agent.owner()).to.equal(owner.address);
             expect(await agent.name()).to.equal("TODL Agent NFT");
             expect(await agent.symbol()).to.equal("AGENT");
@@ -57,7 +57,7 @@ describe("Agent NFT Contract", function () {
         });
 
         it("같은 URI로 설정할 수 없어야 한다", async function () {
-            await expect(agent.setBaseURI("https://dev.todl.fun/api/file-download/json/"))
+            await expect(agent.setBaseURI("https://todl.fun/api/file-download/json/"))
                 .to.be.revertedWith("Same Uri");
         });
     });

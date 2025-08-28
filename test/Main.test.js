@@ -151,13 +151,13 @@ describe("Main Contract", function () {
         [owner, admin, carrier, donateAddr, corporateAddr, operationAddr, user1, user2, user3] = await ethers.getSigners();
 
     // 컨트랙트 배포
-        const Main = await ethers.getContractFactory("MainMock"); // 테스트용
+    const Main = await ethers.getContractFactory("MainMock"); // 테스트용
     const ItemParts = await ethers.getContractFactory("ItemPartsNFT");
     const Agent = await ethers.getContractFactory("AgentNFT");
-        const Rng = await ethers.getContractFactory("Rng");
+    const Rng = await ethers.getContractFactory("Rng");
     const RewardPool = await ethers.getContractFactory("RewardPool");
-        const StakePool = await ethers.getContractFactory("StakePool");
-        const Reserv = await ethers.getContractFactory("Reserv");
+    const StakePool = await ethers.getContractFactory("StakePool");
+    const Reserv = await ethers.getContractFactory("Reserv");
     const SttToken = await ethers.getContractFactory("SttPermit");
 
         // STT 토큰 먼저 배포
