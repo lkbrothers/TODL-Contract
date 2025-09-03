@@ -74,6 +74,20 @@ async function main() {
         await main.waitForDeployment();
         const mainAddr = await main.getAddress();
         console.log("✅ Main 컨트랙트 배포 완료:", mainAddr);
+        if ((await network.provider.send('eth_chainId')) == "0x6300b5ea") {
+            console.log("Verifying contract...");
+            const args = [
+                [admin, carrier],
+                donateAddr,
+                corporateAddr,
+                operationAddr
+            ];
+            let mainAddr = await main.getAddress();
+            await run("verify:verify", {
+                address: mainAddr,
+                constructorArguments: args,
+            });
+        }
         await waitIfNeeded();
 
         // 3. ItemParts 컨트랙트 배포
