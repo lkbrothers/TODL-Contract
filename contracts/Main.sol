@@ -813,37 +813,41 @@ contract Main is Ownable {
                 roundSettleInfo.stakedAmount = stakedAmount;
                 roundSettleInfo.totalPrizePayout = totalPrizePayout;
             } else {
-                uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
-                uint256 prizePerWinner = 0;
-                donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
-                corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
-                operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
-                stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
-                // 즉시 출금항목 (donate, corporate, stake, operation)
-                RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-                if(donateAmount > 0) {
-                    rewardPool.withdraw(donateAddr, donateAmount);
-                }
-                if(corporateAmount > 0) {
-                    rewardPool.withdraw(corporateAddr, corporateAmount);
-                }
-                if(operationAmount > 0) {
-                    rewardPool.withdraw(operationAddr, operationAmount);
-                }
-                if(stakedAmount > 0) {
-                    rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], stakedAmount);
-                }
+                // uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
+                // uint256 prizePerWinner = 0;
+                // donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
+                // corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
+                // operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
+                // stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
+                // // 즉시 출금항목 (donate, corporate, stake, operation)
+                // RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+                // if(donateAmount > 0) {
+                //     rewardPool.withdraw(donateAddr, donateAmount);
+                // }
+                // if(corporateAmount > 0) {
+                //     rewardPool.withdraw(corporateAddr, corporateAmount);
+                // }
+                // if(operationAmount > 0) {
+                //     rewardPool.withdraw(operationAddr, operationAmount);
+                // }
+                // if(stakedAmount > 0) {
+                //     rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], stakedAmount);
+                // }
                 
-                roundSettleInfo.prizePerWinner = prizePerWinner;
-                roundSettleInfo.donateAmount = donateAmount;
-                roundSettleInfo.corporateAmount = corporateAmount;
-                roundSettleInfo.operationAmount = operationAmount;
-                roundSettleInfo.stakedAmount = stakedAmount;
-                roundSettleInfo.totalPrizePayout = 0;
+                // roundSettleInfo.prizePerWinner = prizePerWinner;
+                // roundSettleInfo.donateAmount = donateAmount;
+                // roundSettleInfo.corporateAmount = corporateAmount;
+                // roundSettleInfo.operationAmount = operationAmount;
+                // roundSettleInfo.stakedAmount = stakedAmount;
+                // roundSettleInfo.totalPrizePayout = 0;
+                donateAmount = 0;
+                corporateAmount = 0;
+                operationAmount = 0;
+                stakedAmount = 0;
                 // 상금은 다음라운드로 즉시 이월된다. (묻고 따블로가!)
                 RoundSettleManageInfo storage nextRoundSettleInfo = roundSettleManageInfo[_roundId+1];
-                nextRoundSettleInfo.depositedAmount = totalPrizePayout;
-                carryAmount = totalPrizePayout;
+                nextRoundSettleInfo.depositedAmount = depositedAmount;
+                carryAmount = depositedAmount;
             }
         }
     }
