@@ -27,7 +27,7 @@ describe("ItemParts NFT Contract", function () {
             expect(await itemParts.totalSupply()).to.equal(0);
             expect(await itemParts.mintAtTime()).to.equal(5); // MINT_AT_TIME
             expect(await itemParts.maxMintsPerDay()).to.equal(50); // MAX_FREE_MINTS_PER_DAY
-            expect(await itemParts.baseUri()).to.equal("https://dev.todl.fun/api/file-download/json/");
+            expect(await itemParts.baseUri()).to.equal("https://todl.fun/api/file-download/json/");
             expect(await itemParts.owner()).to.equal(owner.address);
         });
 
@@ -114,7 +114,7 @@ describe("ItemParts NFT Contract", function () {
         });
 
         it("같은 URI로 설정할 수 없어야 한다", async function () {
-            await expect(itemParts.setBaseURI("https://dev.todl.fun/api/file-download/json/"))
+            await expect(itemParts.setBaseURI("https://todl.fun/api/file-download/json/"))
                 .to.be.revertedWith("Same Uri");
         });
     });
@@ -192,7 +192,7 @@ describe("ItemParts NFT Contract", function () {
             const tokenId = 1;
             const tokenURI = await itemParts.tokenURI(tokenId);
             
-            expect(tokenURI).to.include("https://dev.todl.fun/api/file-download/json/");
+            expect(tokenURI).to.include("https://todl.fun/api/file-download/json/");
             expect(tokenURI).to.include(".json");
         });
     });

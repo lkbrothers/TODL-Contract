@@ -89,19 +89,19 @@ async function executeMinting(itemParts, wallet) {
 /**
  * @notice 이벤트에서 파싱된 토큰 정보를 기반으로 추가 정보를 수집
  * @param {*} itemParts ItemParts NFT 컨트랙트
- * @param {*} mintedTokens 이벤트에서 파싱된 토큰 정보 배열
+ * @param {*} parts 이벤트에서 파싱된 토큰 정보 배열
  * @returns minting된 토큰정보 배열 (tokenId, owner, typeName, partsIndex, originsIndex, setNumsIndex)
  */
-async function getMintedTokensInfo(itemParts, mintedTokens) {
+async function getMintedTokensInfo(itemParts, parts) {
     const enrichedTokens = [];
     
-    for (const token of mintedTokens) {
+    for (const idx of parts) {
         try {
-            const tokenInfo = await itemParts.tokenInfo(token.tokenId);
+            const tokenInfo = await itemParts.tokenInfo(idx.tokenId);
             
             enrichedTokens.push({
-                tokenId: token.tokenId,
-                owner: token.owner,
+                tokenId: idx.tokenId,
+                owner: idx.owner,
                 typeName: tokenInfo.typeName,
                 partsIndex: tokenInfo.partsIndex,
                 originsIndex: tokenInfo.originsIndex,
@@ -110,8 +110,8 @@ async function getMintedTokensInfo(itemParts, mintedTokens) {
         } catch (error) {
             // 토큰 정보를 가져올 수 없는 경우 기본 정보만 사용
             enrichedTokens.push({
-                tokenId: token.tokenId,
-                owner: token.owner,
+                tokenId: idx.tokenId,
+                owner: idx.owner,
                 typeName: null,
                 partsIndex: null,
                 originsIndex: null,
@@ -201,18 +201,18 @@ function logResult(result) {
  * @notice bulk로 민팅된 itemParts NFT 정보를 출력한다.
  * @param {*} mintedTokens bulk로 민팅된 itemParts NFT 정보 (배열)
  */
-function logMintedTokens(mintedTokens) {
+function logMintedTokens(parts) {
     console.log("\n🎁 민팅된 NFT 정보:");
-    mintedTokens.forEach((token, index) => {
-        console.log(`  ${index + 1}. 토큰 ID: ${token.tokenId}`);
-        if (token.owner) {
-            console.log(`     소유자: ${token.owner}`);
-            console.log(`     타입: ${token.typeName}`);
-            console.log(`     부위 인덱스: ${token.partsIndex}`);
-            console.log(`     기원 인덱스: ${token.originsIndex}`);
-            console.log(`     세트 번호 인덱스: ${token.setNumsIndex}`);
+    parts.forEach((idx, index) => {
+        console.log(`  ${index + 1}. 토큰 ID: ${idx.tokenId}`);
+        if (idx.owner) {
+            console.log(`     소유자: ${idx.owner}`);
+            console.log(`     타입: ${idx.typeName}`);
+            console.log(`     부위 인덱스: ${idx.partsIndex}`);
+            console.log(`     기원 인덱스: ${idx.originsIndex}`);
+            console.log(`     세트 번호 인덱스: ${idx.setNumsIndex}`);
         } else {
-            console.log(`     ⚠️ 토큰 정보를 가져올 수 없습니다: ${token.error}`);
+            console.log(`     ⚠️ 토큰 정보를 가져올 수 없습니다: ${idx.error}`);
         }
         console.log("");
     });

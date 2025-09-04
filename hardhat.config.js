@@ -2,6 +2,8 @@ require("@nomicfoundation/hardhat-toolbox");
 require("@typechain/hardhat");
 require('dotenv').config();
 
+require("@nomicfoundation/hardhat-verify");
+
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
   solidity: {
@@ -37,5 +39,21 @@ module.exports = {
       url: process.env.PROVIDER_URL,
       accounts: [process.env.PRIVATE_KEY]
     }
-  }
+  },
+  etherscan: {
+    apiKey: {
+      // Is not required by blockscout. Can be any non-empty string
+      'StatusNetwork': "abc"
+    },
+    customChains: [
+      {
+        network: "StatusNetwork",
+        chainId: 1660990954,
+        urls: {
+          apiURL: "https://sepoliascan.status.network/api",
+          browserURL: "https://sepoliascan.status.network/",
+        }
+      }
+    ]
+  },
 };

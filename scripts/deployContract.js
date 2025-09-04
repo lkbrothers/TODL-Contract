@@ -46,25 +46,45 @@ async function main() {
     console.log("  - Operation Address:", operationAddr);
 
     try {
-        // 1. STT 토큰 먼저 배포
-        let sttAddr;
+        // 1. Token 토큰 먼저 배포
+        let tokenAddr;
         if(hre.network.name == 'StatusNetwork') {
-            sttAddr = "0x1C3Ac2a186c6149Ae7Cb4D716eBbD0766E4f898a";
-            console.log("✅ STT 배포절차 skip! STT 토큰 주소:", sttAddr);
+            if(process.env.USE_STABLE_COIN == '1') {
+                console.log("\n1️⃣ StableCoin 토큰 배포 중...");
+                const Token = await ethers.getContractFactory("StableCoin");
+                const token = await Token.connect(ownerWallet).deploy();
+                await token.waitForDeployment();
+                tokenAddr = await token.getAddress();
+                console.log("✅ StableCoin 토큰 배포 완료:", tokenAddr);
+                await waitIfNeeded();
+            } else {
+                tokenAddr = "0x1C3Ac2a186c6149Ae7Cb4D716eBbD0766E4f898a";
+                console.log("✅ Token 배포절차 skip! Token 토큰 주소:", tokenAddr);
+            }
         } else {
-            console.log("\n1️⃣ STT 토큰 배포 중...");
-            const SttToken = await ethers.getContractFactory("SttPermit");
-            const sttToken = await SttToken.connect(ownerWallet).deploy();
-            await sttToken.waitForDeployment();
-            sttAddr = await sttToken.getAddress();
-            console.log("✅ STT 토큰 배포 완료:", sttAddr);
-            await waitIfNeeded();
+            if(process.env.USE_STABLE_COIN == '1') {
+                console.log("\n1️⃣ StableCoin 토큰 배포 중...");
+                const Token = await ethers.getContractFactory("StableCoin");
+                const token = await Token.connect(ownerWallet).deploy();
+                await token.waitForDeployment();
+                tokenAddr = await token.getAddress();
+                console.log("✅ StableCoin 토큰 배포 완료:", tokenAddr);
+                await waitIfNeeded();
+            } else {
+                console.log("\n1️⃣ Token 토큰 배포 중...");
+                const Token = await ethers.getContractFactory("SttPermit");
+                const token = await Token.connect(ownerWallet).deploy();
+                await token.waitForDeployment();
+                tokenAddr = await token.getAddress();
+                console.log("✅ Token 토큰 배포 완료:", tokenAddr);
+                await waitIfNeeded();
+            }
         }
         // 2. Main 컨트랙트 배포
-        // console.log("\n2️⃣ Main 컨트랙트 배포 중...");
-        // const Main = await ethers.getContractFactory("Main");
-        console.log("\n2️⃣ MainMock 컨트랙트 배포 중...");
-        const Main = await ethers.getContractFactory("MainMock"); // 당첨자 지정을 위해 Mock deploy (리얼버전에서는 반드시 빠져야 한다!)
+        console.log("\n2️⃣ Main 컨트랙트 배포 중...");
+        const Main = await ethers.getContractFactory("Main");
+        // console.log("\n2️⃣ MainMock 컨트랙트 배포 중...");
+        // const Main = await ethers.getContractFactory("MainMock"); // 당첨자 지정을 위해 Mock deploy (리얼버전에서는 반드시 빠져야 한다!)
         const main = await Main.connect(ownerWallet).deploy(
             [admin, carrier],
             donateAddr,
@@ -74,6 +94,20 @@ async function main() {
         await main.waitForDeployment();
         const mainAddr = await main.getAddress();
         console.log("✅ Main 컨트랙트 배포 완료:", mainAddr);
+        if ((await network.provider.send('eth_chainId')) == "0x6300b5ea") {
+            console.log("Verifying contract...");
+            const args = [
+                [admin, carrier],
+                donateAddr,
+                corporateAddr,
+                operationAddr
+            ];
+            let mainAddr = await main.getAddress();
+            await run("verify:verify", {
+                address: mainAddr,
+                constructorArguments: args,
+            });
+        }
         await waitIfNeeded();
 
         // 3. ItemParts 컨트랙트 배포
@@ -106,7 +140,7 @@ async function main() {
         // 6. RewardPool 컨트랙트 배포
         console.log("\n6️⃣ RewardPool 컨트랙트 배포 중...");
         const RewardPool = await ethers.getContractFactory("RewardPool");
-        const rewardPool = await RewardPool.connect(ownerWallet).deploy(mainAddr, sttAddr);
+        const rewardPool = await RewardPool.connect(ownerWallet).deploy(mainAddr, tokenAddr);
         await rewardPool.waitForDeployment();
         const rewardPoolAddr = await rewardPool.getAddress();
         console.log("✅ RewardPool 컨트랙트 배포 완료:", rewardPoolAddr);
@@ -115,7 +149,7 @@ async function main() {
         // 7. StakePool 컨트랙트 배포
         console.log("\n7️⃣ StakePool 컨트랙트 배포 중...");
         const StakePool = await ethers.getContractFactory("StakePool");
-        const stakePool = await StakePool.connect(ownerWallet).deploy(sttAddr);
+        const stakePool = await StakePool.connect(ownerWallet).deploy(tokenAddr);
         await stakePool.waitForDeployment();
         const stakePoolAddr = await stakePool.getAddress();
         console.log("✅ StakePool 컨트랙트 배포 완료:", stakePoolAddr);
@@ -124,7 +158,7 @@ async function main() {
         // 8. Reserv 컨트랙트 배포
         console.log("\n8️⃣ Reserv 컨트랙트 배포 중...");
         const Reserv = await ethers.getContractFactory("Reserv");
-        const reserv = await Reserv.connect(ownerWallet).deploy(sttAddr);
+        const reserv = await Reserv.connect(ownerWallet).deploy(tokenAddr);
         await reserv.waitForDeployment();
         const reservAddr = await reserv.getAddress();
         console.log("✅ Reserv 컨트랙트 배포 완료:", reservAddr);
@@ -139,7 +173,7 @@ async function main() {
             rewardPoolAddr,
             stakePoolAddr,
             reservAddr,
-            sttAddr
+            tokenAddr
         ];
         
         const setContractsTx = await main.connect(ownerWallet).setContracts(managedContracts);
@@ -150,7 +184,7 @@ async function main() {
         console.log("\n🎉 모든 컨트랙트 배포가 완료되었습니다!");
         console.log("\n📋 배포된 컨트랙트 주소들:");
         console.log("  - Main:", mainAddr);
-        console.log("  - STT Token:", sttAddr);
+        console.log("  - Token Token:", tokenAddr);
         console.log("  - ItemParts:", itemPartsAddr);
         console.log("  - Agent:", agentAddr);
         console.log("  - Rng:", rngAddr);
@@ -164,7 +198,7 @@ async function main() {
             deployer: ownerWallet.address, // OWNER_KEY로 배포한 주소
             contracts: {
                 main: mainAddr,
-                sttToken: sttAddr,
+                token: tokenAddr,
                 itemParts: itemPartsAddr,
                 agent: agentAddr,
                 rng: rngAddr,

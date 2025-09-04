@@ -37,7 +37,7 @@ const { settleRoundForced } = require('./libs/main/admin/settleRounForced');
 const { 
     faucet,
     logResult: logFaucetResult
-} = require('./libs/stt/faucet');
+} = require('./libs/token/faucet');
 
 
 async function main() {
@@ -56,7 +56,7 @@ async function main() {
         console.error("  main:settleRoundForced <winnerHash>");
         console.error("  main:endRound <round_id>");
         console.error("  main:roundInfo");
-        console.error("  stt:faucet <to_address> <amount_in_ether>");
+        console.error("  token:faucet <to_address> <amount_in_ether>");
         console.error("예시:");
         console.error("  node cli.js itemParts:mint");
         console.error("  node cli.js main:buyAgent 1 2 3 4 5");
@@ -341,33 +341,33 @@ async function main() {
 
             console.log("✅ main:endRound 액션이 완료되었습니다.");
 
-        } else if (action === 'stt:faucet') {
-            const sttAddress = deploymentInfo.contracts.sttToken;
+        } else if (action === 'token:faucet') {
+            const tokenAddress = deploymentInfo.contracts.token;
 
-            if (!sttAddress) {
-                console.error("❌ deployment-info.json에서 sttToken 주소를 찾을 수 없습니다.");
+            if (!tokenAddress) {
+                console.error("❌ deployment-info.json에서 token 주소를 찾을 수 없습니다.");
                 process.exit(1);
             }
 
             if (actionArgs.length !== 2) {
                 console.error("❌ faucet은 수신자 주소와 전송량이 필요합니다.");
-                console.error("사용법: node cli.js stt:faucet <to_address> <amount_in_ether>");
+                console.error("사용법: node cli.js token:faucet <to_address> <amount_in_ether>");
                 process.exit(1);
             }
 
             const to = actionArgs[0];
-            const amount = ethers.parseEther(actionArgs[1]);
+            const amount = actionArgs[1];
 
-            console.log("🎯 STT 컨트랙트 주소:", sttAddress);
+            console.log("🎯 Token 컨트랙트 주소:", tokenAddress);
             console.log("🎯 수신자 주소:", to);
-            console.log("💰 전송량:", actionArgs[1], "STT");
+            console.log("💰 전송량:", actionArgs[1], "Token");
 
-            const result = await faucet(sttAddress, to, amount);
+            const result = await faucet(tokenAddress, to, amount);
             
             // 결과 로깅
             logFaucetResult(result);
             
-            console.log("✅ stt:faucet 액션이 완료되었습니다.");
+            console.log("✅ token:faucet 액션이 완료되었습니다.");
 
         } else {
             console.error("❌ 지원하지 않는 액션입니다:", action);
@@ -381,7 +381,7 @@ async function main() {
             console.error("  main:settleRound <round_id>");
             console.error("  main:settleRoundForced <round_id> <winnerHash>");
             console.error("  main:roundInfo");
-            console.error("  stt:faucet <to_address> <amount_in_ether>");
+            console.error("  token:faucet <to_address> <amount_in_ether>");
             process.exit(1);
         }
 
