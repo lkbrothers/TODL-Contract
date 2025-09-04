@@ -65,11 +65,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         uint256 originsIndex,
         uint256 setNumsIndex
     );
-    /**
-     * @notice 소각 이벤트
-     * @param tokenId 소각된 토큰ID
-     */
-    event Burned(uint256 indexed tokenId);
 
     // def. ERROR
     error MintAtTimeOutOfRange(uint256 proposal); // mintAtTime 입력값 범위초과
@@ -272,7 +267,6 @@ contract ItemPartsNFT is ERC721URIStorage, Ownable {
         
         // burn 
         _burn(_tokenId);
-        emit Burned(_tokenId);
         // Storage 갱신
         countPerMintType[tokenInfo[_tokenId].typeHash].burnCount++;
         // 예외상황 체크

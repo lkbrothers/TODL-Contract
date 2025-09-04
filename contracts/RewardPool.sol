@@ -7,28 +7,14 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 /**
  * @title RewardPool Contract
  * @notice TODL 프로젝트의 보상 풀 컨트랙트
- * @dev STT 토큰을 관리하고 EIP-2612 permit 기능을 제공
+ * @dev Token 토큰을 관리하고 EIP-2612 permit 기능을 제공
  * @author hlibbc
  */
 contract RewardPool {
     // def. VARIABLE
     address public mainAddr;    /// Main 컨트랙트 주소
-    IERC20 public immutable stt; /// STT 토큰 컨트랙트
-    IERC20Permit public immutable sttPermit; /// STT 토큰의 Permit 인터페이스
-
-    // def. EVENT
-    /**
-     * @notice 토큰 입금 이벤트
-     * @param from 입금한 주소
-     * @param amount 입금된 금액
-     */
-    event Deposited(address indexed from, uint256 amount);
-    /**
-     * @notice 토큰 출금 이벤트
-     * @param to 출금받을 주소
-     * @param amount 출금된 금액
-     */
-    event Withdrawn(address indexed to, uint256 amount);
+    IERC20 public immutable token; /// Token 토큰 컨트랙트
+    IERC20Permit public immutable tokenPermit; /// Token 토큰의 Permit 인터페이스
 
     // def. MODIFIER
     /**
@@ -42,17 +28,17 @@ contract RewardPool {
     /**
      * @notice RewardPool 컨트랙트 생성자
      * @param _mainAddr Main 컨트랙트 주소
-     * @param _sttAddr STT 토큰 컨트랙트 주소
+     * @param _tokenAddr Token 토큰 컨트랙트 주소
      */
     constructor(
         address _mainAddr, 
-        address _sttAddr
+        address _tokenAddr
     ) {
         require(_mainAddr != address(0), "Invalid main address");
-        require(_sttAddr != address(0), "Invalid token address");
+        require(_tokenAddr != address(0), "Invalid token address");
         mainAddr = _mainAddr;
-        stt = IERC20(_sttAddr);
-        sttPermit = IERC20Permit(_sttAddr); // cast to permit interface
+        token = IERC20(_tokenAddr);
+        tokenPermit = IERC20Permit(_tokenAddr); // cast to permit interface
     }
 
     /**
@@ -76,17 +62,15 @@ contract RewardPool {
         (uint8 v, bytes32 r, bytes32 s) = _splitSignature(sig);
 
         // 1. permit
-        sttPermit.permit(_from, address(this), _amount, _deadline, v, r, s);
+        tokenPermit.permit(_from, address(this), _amount, _deadline, v, r, s);
 
         // 2. transferFrom
-        require(stt.transferFrom(_from, address(this), _amount), "Transfer failed");
-
-        emit Deposited(_from, _amount);
+        require(token.transferFrom(_from, address(this), _amount), "Transfer failed");
     }
 
 
     /**
-     * @notice Main 컨트랙트가 Pool에 쌓인 STT를 특정 주소로 송금
+     * @notice Main 컨트랙트가 Pool에 쌓인 Token를 특정 주소로 송금
      * @param _to 출금받을 주소
      * @param _amount 출금할 금액
      */
@@ -96,17 +80,16 @@ contract RewardPool {
     ) external onlyMain {
         require(_to != address(0), "Invalid receiver");
         require(_amount > 0, "Zero amount");
-        require(stt.balanceOf(address(this)) >= _amount, "Insufficient balance");
+        require(token.balanceOf(address(this)) >= _amount, "Insufficient balance");
 
-        require(stt.transfer(_to, _amount), "Withdraw failed");
-        emit Withdrawn(_to, _amount);
+        require(token.transfer(_to, _amount), "Withdraw failed");
     }
     /**
-     * @notice 현재 Pool 컨트랙트가 보유 중인 STT 잔액
-     * @return Pool의 STT 잔액
+     * @notice 현재 Pool 컨트랙트가 보유 중인 Token 잔액
+     * @return Pool의 Token 잔액
      */
     function getDepositAmounts() public view returns (uint256) {
-        return stt.balanceOf(address(this));
+        return token.balanceOf(address(this));
     }
     /**
      * @notice bytes 서명을 v, r, s로 분해합니다 (EIP-2612 등에서 사용)

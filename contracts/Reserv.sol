@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
  */
 contract Reserv is Ownable {
     // def. VARIABLE
-    IERC20 public immutable stt; /// STT 토큰 컨트랙트
+    IERC20 public immutable token; /// Token 토큰 컨트랙트
 
     // def. EVENT
     /**
@@ -24,17 +24,17 @@ contract Reserv is Ownable {
 
     /**
      * @notice RewardPool 컨트랙트 생성자
-     * @param _sttAddr STT 토큰 컨트랙트 주소
+     * @param _tokenAddr Token 토큰 컨트랙트 주소
      */
     constructor(
-        address _sttAddr
+        address _tokenAddr
     ) Ownable(msg.sender) {
-        require(_sttAddr != address(0), "Invalid token address");
-        stt = IERC20(_sttAddr);
+        require(_tokenAddr != address(0), "Invalid token address");
+        token = IERC20(_tokenAddr);
     }
 
     /**
-     * @notice Reserv에 쌓인 STT를 특정 주소로 송금
+     * @notice Reserv에 쌓인 Token를 특정 주소로 송금
      * @param _to 출금받을 주소
      * @param _amount 출금할 금액
      */
@@ -44,15 +44,15 @@ contract Reserv is Ownable {
     ) external onlyOwner {
         require(_to != address(0), "Invalid receiver");
         require(_amount > 0, "Zero amount");
-        require(stt.balanceOf(address(this)) >= _amount, "Insufficient balance");
-        require(stt.transfer(_to, _amount), "Withdraw failed");
+        require(token.balanceOf(address(this)) >= _amount, "Insufficient balance");
+        require(token.transfer(_to, _amount), "Withdraw failed");
         emit Withdrawn(_to, _amount);
     }
     /**
-     * @notice 현재 Pool 컨트랙트가 보유 중인 STT 잔액
-     * @return Pool의 STT 잔액
+     * @notice 현재 Pool 컨트랙트가 보유 중인 Token 잔액
+     * @return Pool의 Token 잔액
      */
     function getDepositAmounts() public view returns (uint256) {
-        return stt.balanceOf(address(this));
+        return token.balanceOf(address(this));
     }
 }

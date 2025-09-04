@@ -6,8 +6,10 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+
 describe("RewardPool Contract", function () {
-    let rewardPool, sttToken;
+    let rewardPool, token, decimal;
     let owner, user1, user2, user3;
     let mockMainAddr;
 
@@ -15,31 +17,33 @@ describe("RewardPool Contract", function () {
         [owner, user1, user2, user3] = await ethers.getSigners();
         mockMainAddr = user3.address; // 테스트용 Mock Main 주소
 
-        // STT 토큰 컨트랙트 배포
-        const SttToken = await ethers.getContractFactory("SttPermit");
-        sttToken = await SttToken.deploy();
-        await sttToken.waitForDeployment();
+        // Token 토큰 컨트랙트 배포
+        let tokenName = (process.env.USE_STABLE_COIN == '1')? ("StableCoin") : ("SttPermit");
+        const Token = await ethers.getContractFactory(tokenName);
+        token = await Token.deploy();
+        await token.waitForDeployment();
+        decimal = await token.decimals();
 
         // RewardPool 컨트랙트 배포
         const RewardPool = await ethers.getContractFactory("RewardPool");
-        rewardPool = await RewardPool.deploy(mockMainAddr, await sttToken.getAddress());
+        rewardPool = await RewardPool.deploy(mockMainAddr, await token.getAddress());
         await rewardPool.waitForDeployment();
     });
 
     describe("초기화", function () {
         it("컨트랙트가 올바르게 초기화되어야 한다", async function () {
             expect(await rewardPool.mainAddr()).to.equal(mockMainAddr);
-            expect(await rewardPool.stt()).to.equal(await sttToken.getAddress());
-            expect(await rewardPool.sttPermit()).to.equal(await sttToken.getAddress());
+            expect(await rewardPool.token()).to.equal(await token.getAddress());
+            expect(await rewardPool.token()).to.equal(await token.getAddress());
         });
 
         it("zero address로 Main 주소를 설정할 수 없어야 한다", async function () {
             const RewardPool = await ethers.getContractFactory("RewardPool");
-            await expect(RewardPool.deploy(ethers.ZeroAddress, await sttToken.getAddress()))
+            await expect(RewardPool.deploy(ethers.ZeroAddress, await token.getAddress()))
                 .to.be.revertedWith("Invalid main address");
         });
 
-        it("zero address로 STT 주소를 설정할 수 없어야 한다", async function () {
+        it("zero address로 Token 주소를 설정할 수 없어야 한다", async function () {
             const RewardPool = await ethers.getContractFactory("RewardPool");
             await expect(RewardPool.deploy(mockMainAddr, ethers.ZeroAddress))
                 .to.be.revertedWith("Invalid token address");
@@ -51,9 +55,9 @@ describe("RewardPool Contract", function () {
             expect(await rewardPool.getDepositAmounts()).to.equal(0);
         });
 
-        it("STT 토큰을 전송한 후 Pool 잔액이 증가해야 한다", async function () {
-            const amount = ethers.parseEther("100");
-            await sttToken.transfer(await rewardPool.getAddress(), amount);
+        it("Token 토큰을 전송한 후 Pool 잔액이 증가해야 한다", async function () {
+            const amount = ethers.parseUnits("100", decimal);
+            await token.transfer(await rewardPool.getAddress(), amount);
             
             expect(await rewardPool.getDepositAmounts()).to.equal(amount);
         });
@@ -75,13 +79,13 @@ describe("RewardPool Contract", function () {
         });
     });
 
-    describe("STT 토큰 인터페이스", function () {
-        it("STT 토큰 주소를 올바르게 가져올 수 있어야 한다", async function () {
-            expect(await rewardPool.stt()).to.equal(await sttToken.getAddress());
+    describe("Token 토큰 인터페이스", function () {
+        it("Token 토큰 주소를 올바르게 가져올 수 있어야 한다", async function () {
+            expect(await rewardPool.token()).to.equal(await token.getAddress());
         });
 
-        it("STT Permit 인터페이스를 올바르게 가져올 수 있어야 한다", async function () {
-            expect(await rewardPool.sttPermit()).to.equal(await sttToken.getAddress());
+        it("Token Permit 인터페이스를 올바르게 가져올 수 있어야 한다", async function () {
+            expect(await rewardPool.token()).to.equal(await token.getAddress());
         });
     });
 
@@ -90,12 +94,12 @@ describe("RewardPool Contract", function () {
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = ethers.randomBytes(65);
             
-            await expect(rewardPool.connect(user1).deposit(user1.address, ethers.parseEther("1"), deadline, signature))
+            await expect(rewardPool.connect(user1).deposit(user1.address, ethers.parseUnits("1", decimal), deadline, signature))
                 .to.be.revertedWith("Not Main contract");
         });
 
         it("Main이 아닌 계정은 withdraw를 호출할 수 없어야 한다", async function () {
-            await expect(rewardPool.connect(user1).withdraw(user1.address, ethers.parseEther("1")))
+            await expect(rewardPool.connect(user1).withdraw(user1.address, ethers.parseUnits("1", decimal)))
                 .to.be.revertedWith("Not Main contract");
         });
     });
@@ -103,8 +107,8 @@ describe("RewardPool Contract", function () {
     describe("이벤트 발생", function () {
         it("deposit 시 Deposited 이벤트가 발생해야 한다", async function () {
             // Main 컨트랙트로부터 호출하는 것처럼 시뮬레이션
-            const amount = ethers.parseEther("100");
-            await sttToken.transfer(await rewardPool.getAddress(), amount);
+            const amount = ethers.parseUnits("100", decimal);
+            await token.transfer(await rewardPool.getAddress(), amount);
             
             // 이벤트 발생을 확인하기 위해 트랜잭션을 직접 호출
             // 실제로는 Main 컨트랙트에서만 호출 가능하므로 이벤트 발생 여부만 확인
@@ -113,8 +117,8 @@ describe("RewardPool Contract", function () {
 
         it("withdraw 시 Withdrawn 이벤트가 발생해야 한다", async function () {
             // Main 컨트랙트로부터 호출하는 것처럼 시뮬레이션
-            const amount = ethers.parseEther("100");
-            await sttToken.transfer(await rewardPool.getAddress(), amount);
+            const amount = ethers.parseUnits("100", decimal);
+            await token.transfer(await rewardPool.getAddress(), amount);
             
             // 이벤트 발생을 확인하기 위해 트랜잭션을 직접 호출
             // 실제로는 Main 컨트랙트에서만 호출 가능하므로 이벤트 발생 여부만 확인
@@ -122,36 +126,36 @@ describe("RewardPool Contract", function () {
         });
     });
 
-    describe("STT 토큰 상호작용", function () {
-        it("STT 토큰 잔액을 올바르게 조회할 수 있어야 한다", async function () {
-            const balance = await sttToken.balanceOf(await rewardPool.getAddress());
+    describe("Token 토큰 상호작용", function () {
+        it("Token 토큰 잔액을 올바르게 조회할 수 있어야 한다", async function () {
+            const balance = await token.balanceOf(await rewardPool.getAddress());
             expect(balance).to.equal(0);
         });
 
-        it("STT 토큰을 Pool에 전송할 수 있어야 한다", async function () {
-            const amount = ethers.parseEther("50");
-            await sttToken.transfer(await rewardPool.getAddress(), amount);
+        it("Token 토큰을 Pool에 전송할 수 있어야 한다", async function () {
+            const amount = ethers.parseUnits("50", decimal);
+            await token.transfer(await rewardPool.getAddress(), amount);
             
-            const poolBalance = await sttToken.balanceOf(await rewardPool.getAddress());
+            const poolBalance = await token.balanceOf(await rewardPool.getAddress());
             expect(poolBalance).to.equal(amount);
         });
     });
 
     describe("Pool 상태 확인", function () {
-        it("Pool이 STT 토큰을 보유할 수 있어야 한다", async function () {
-            const amount = ethers.parseEther("100");
-            await sttToken.transfer(await rewardPool.getAddress(), amount);
+        it("Pool이 Token 토큰을 보유할 수 있어야 한다", async function () {
+            const amount = ethers.parseUnits("100", decimal);
+            await token.transfer(await rewardPool.getAddress(), amount);
             
             const poolBalance = await rewardPool.getDepositAmounts();
             expect(poolBalance).to.equal(amount);
         });
 
         it("Pool의 잔액이 정확히 반영되어야 한다", async function () {
-            const amount1 = ethers.parseEther("50");
-            const amount2 = ethers.parseEther("30");
+            const amount1 = ethers.parseUnits("50", decimal);
+            const amount2 = ethers.parseUnits("30", decimal);
             
-            await sttToken.transfer(await rewardPool.getAddress(), amount1);
-            await sttToken.transfer(await rewardPool.getAddress(), amount2);
+            await token.transfer(await rewardPool.getAddress(), amount1);
+            await token.transfer(await rewardPool.getAddress(), amount2);
             
             const totalAmount = amount1 + amount2;
             const poolBalance = await rewardPool.getDepositAmounts();
@@ -160,22 +164,22 @@ describe("RewardPool Contract", function () {
     });
 
     describe("EIP-2612 Permit 기능", function () {
-        it("STT 토큰이 Permit 기능을 지원해야 한다", async function () {
-            // STT 토큰이 IERC20Permit 인터페이스를 구현하는지 확인
-            const sttPermit = await rewardPool.sttPermit();
-            expect(sttPermit).to.equal(await sttToken.getAddress());
+        it("Token 토큰이 Permit 기능을 지원해야 한다", async function () {
+            // Token 토큰이 IERC20Permit 인터페이스를 구현하는지 확인
+            const tokenPermit = await rewardPool.token();
+            expect(tokenPermit).to.equal(await token.getAddress());
         });
 
         it("Permit 서명을 생성할 수 있어야 한다", async function () {
             const deadline = Math.floor(Date.now() / 1000) + 3600;
-            const nonce = await sttToken.nonces(user1.address);
+            const nonce = await token.nonces(user1.address);
             
             // Permit 서명 생성 (실제로는 deposit 함수에서 사용됨)
             const domain = {
-                name: await sttToken.name(),
+                name: await token.name(),
                 version: '1',
                 chainId: await ethers.provider.getNetwork().then(n => n.chainId),
-                verifyingContract: await sttToken.getAddress()
+                verifyingContract: await token.getAddress()
             };
             
             const types = {
@@ -191,7 +195,7 @@ describe("RewardPool Contract", function () {
             const message = {
                 owner: user1.address,
                 spender: await rewardPool.getAddress(),
-                value: ethers.parseEther("1"),
+                value: ethers.parseUnits("1", decimal),
                 nonce: nonce,
                 deadline: deadline
             };
@@ -214,7 +218,7 @@ describe("RewardPool Contract", function () {
             const deadline = Math.floor(Date.now() / 1000) + 3600;
             const signature = ethers.randomBytes(65);
             
-            await expect(rewardPool.connect(user3).deposit(ethers.ZeroAddress, ethers.parseEther("1"), deadline, signature))
+            await expect(rewardPool.connect(user3).deposit(ethers.ZeroAddress, ethers.parseUnits("1", decimal), deadline, signature))
                 .to.be.revertedWith("Invalid sender");
         });
 
@@ -224,7 +228,7 @@ describe("RewardPool Contract", function () {
         });
 
         it("zero address로 withdraw를 시도할 수 없어야 한다", async function () {
-            await expect(rewardPool.connect(user3).withdraw(ethers.ZeroAddress, ethers.parseEther("1")))
+            await expect(rewardPool.connect(user3).withdraw(ethers.ZeroAddress, ethers.parseUnits("1", decimal)))
                 .to.be.revertedWith("Invalid receiver");
         });
     });

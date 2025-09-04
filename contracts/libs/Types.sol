@@ -37,7 +37,7 @@ library Types {
         RewardPool, /// RewardPool (자금 관리)
         StakePool,  /// 스테이킹 Pool
         Reserv,     /// 이월금액 저장용
-        Stt,        /// 재화 (Status-Network TestToken)
+        Token,      /// 재화로 사용될 토큰 (USDT, USDC, STT, ...)
         Max         /// End-of-enum
     }
 
@@ -104,7 +104,7 @@ library Types {
     uint64  public constant ROUND_CLOSETICKET_AVAIL_TIME = 82800; // 라운드종료시점 (UTC23:00)
     uint64  public constant ROUND_REFUND_AVAIL_TIME = ROUND_PERIOD * 2; // 환불가능시점 (2일)
     uint64  public constant ROUND_PAYOUT_LIMIT_TIME = 30 days; // 클레임 혹은 환불을 수행할 수 있는 기간 (30일)
-    uint256 public constant AGENT_MINTING_FEE = 1 ether; // Agent 민팅비: 1 STT
+    uint256 public constant AGENT_MINTING_FEE = 1 ether; // Agent 민팅비: 1 Token
     uint256 public constant PRIZE_PERCENT = 70; // 당첨금 지급 퍼센트
     uint256 public constant DONATE_PERCENT = 10; // 기부금 지급 퍼센트
     uint256 public constant CORPORATE_PERCENT = 10; // 투자금 지급 퍼센트

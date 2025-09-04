@@ -19,33 +19,7 @@ contract AgentNFT is ERC721URIStorage, Ownable {
      * @param newHash 변경된 BaseUri 해시값 (keccak256)
      */
     event BaseUriUpdated(bytes32 newHash);
-    /**
-     * @notice 민팅 이벤트
-     * @dev 부위 오더링은 아래 지라링크 참조
-     * https://lkbrothers.atlassian.net/browse/SGD-169
-     * @param tokenId 민팅된 토큰 ID
-     * @param owner 소유자 주소
-     * @param headId Head 부위 itemParts NFT
-     * @param bodyId Body 부위 itemParts NFT
-     * @param legId Leg 부위 itemParts NFT
-     * @param rhandId RightHand 부위 itemParts NFT
-     * @param lhandId LeftHand 부위 itemParts NFT
-     */
-    event Minted(
-        uint256 indexed tokenId,
-        address indexed owner,
-        uint256 headId,
-        uint256 bodyId,
-        uint256 legId,
-        uint256 rhandId,
-        uint256 lhandId
-    );
-    /**
-     * @notice 소각 이벤트
-     * @param tokenId 소각된 토큰 ID
-     */
-    event Burned(uint256 indexed tokenId);
-
+    
     // def. CONSTANT
     string  public constant DEFAULT_BASE_URI = "https://todl.fun/api/file-download/json/";
     
@@ -128,15 +102,6 @@ contract AgentNFT is ERC721URIStorage, Ownable {
         tokenId = ++totalSupply;
         // 민트
         _mint(_to, tokenId);
-        emit Minted(
-            tokenId,
-            _to,
-            itemPartsIds[0],
-            itemPartsIds[1],
-            itemPartsIds[2],
-            itemPartsIds[3],
-            itemPartsIds[4]
-        );
         // tokenURI 설정
         ItemPartsNFT itemParts = ItemPartsNFT(getItemPartsNftAddress());
         bytes memory agentName;

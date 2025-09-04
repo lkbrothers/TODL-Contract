@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./Agent.sol";
 import "./ItemParts.sol";
 import "./RewardPool.sol";
@@ -69,7 +70,8 @@ contract Main is Ownable {
 
         uint256 refundedAmount;     /// 환불해간 금액
 
-        uint256 carriedOutAmount;   /// 이월된 금액
+        uint256 carriedOutAmount;   /// 이월된 금액 (당첨자가 없어 다음라운드로 이월)
+        uint256 reservedAmount;     /// 라운드종료까지 클레임/환불되지 않아 Reserv로 입금된 금액
     }
 
     // def. EVENT
@@ -126,7 +128,7 @@ contract Main is Ownable {
      * @param buyer 구매자 주소
      * @param roundId 라운드 ID
      * @param agentId 생성한 Agent ID
-     * @param depositAmount 입금한 금액 (STT-wei)
+     * @param depositAmount 입금한 금액 (Token-wei)
      * @param burnedParts0 ItemParts (Head)
      * @param burnedParts1 ItemParts (Body)
      * @param burnedParts2 ItemParts (Legs)
@@ -149,7 +151,7 @@ contract Main is Ownable {
      * @notice 클레임 이벤트
      * @param claimer 클레임 수행한 주소
      * @param roundId 클레임 라운드 ID
-     * @param claimedAmount 클레임 받은 STT Amount
+     * @param claimedAmount 클레임 받은 Token Amount
      * @param burnedAgentNftId 소각된 Agent NFT id
      */
     event Claimed(
@@ -163,7 +165,7 @@ contract Main is Ownable {
      * @notice 환불 이벤트
      * @param refunder 환불 수행한 주소
      * @param roundId 환불 라운드 ID
-     * @param refundedAmount 환불 받은 STT Amount (1 STT)
+     * @param refundedAmount 환불 받은 Token Amount (1 Token)
      * @param burnedAgentNftId 소각된 Agent NFT id
      */
     event Refunded(
@@ -246,7 +248,7 @@ contract Main is Ownable {
     /**
      * @notice 관리되어야 할 컨트랙트 주소들을 등록한다.
      * @dev onlyOwner
-     * 관리되어야 할 주소: ItemParts, Agent, Pool, Rng, Stt
+     * 관리되어야 할 주소: ItemParts, Agent, Rng, RewardPool, StakePool, Reserv, Token
      * @param _contractAddrs 컨트랙트 주소 배열
      */
     function setContracts(
@@ -453,7 +455,7 @@ contract Main is Ownable {
      * @param _roundId 종료할 라운드 ID
      */
     function endRound(uint256 _roundId) external onlyAdmin {
-        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
+        RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
         Types.RoundStatus roundStatus = roundStatusInfo.status;
         if(roundStatus == Types.RoundStatus.NotStarted || roundStatus == Types.RoundStatus.Ended) {
             revert EndRoundNotAllowed(_roundId, uint8(roundStatus));
@@ -471,7 +473,7 @@ contract Main is Ownable {
     }
 
     /**
-     * @notice 부위별 Parts를 소각하여 Agent를 민팅한다. 민팅비로 1 STT를 받는다.
+     * @notice 부위별 Parts를 소각하여 Agent를 민팅한다. 민팅비로 1 Token를 받는다.
      * @dev 아래 절차를 수행한다.
      * - 하기 사항 체크
      *     - 현재 buy 가능한 상태인지 (Processing)
@@ -481,7 +483,7 @@ contract Main is Ownable {
      * - Agent NFT minting
      * - ItemParts NFT burning
      * @param _itemPartsIds 조합할 ItemParts 부위별 ID
-     * @param _permitSig 1 STT permit signature
+     * @param _permitSig 1 Token permit signature
      */
     function buyAgent(
         uint256[] memory _itemPartsIds,
@@ -490,26 +492,28 @@ contract Main is Ownable {
     ) external {
         RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[roundId];
         require(roundStatusInfo.status == Types.RoundStatus.Proceeding, "Round is not proceeding");
+        uint256 fee = _toTokenAmount(Types.AGENT_MINTING_FEE); // 18dec 기준 1 단위를 토큰단위로 환산 (USDT=6dec → 1e6)
         uint256 callerBalance = getCoinBalance(msg.sender);
-        if(callerBalance < Types.AGENT_MINTING_FEE) {
+        if (callerBalance < fee) {
             revert InsufficientCoin(msg.sender, callerBalance);
         }
         _checkValidItemParts(msg.sender, _itemPartsIds);
         {
             RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-            rewardPool.deposit(msg.sender, Types.AGENT_MINTING_FEE, _deadline, _permitSig);
+            // permit 기반 경로만 사용 (타겟 체인의 USDT는 permit 지원 확인됨)
+            rewardPool.deposit(msg.sender, fee, _deadline, _permitSig);
 
             RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[roundId];
-            roundSettleInfo.depositedAmount += Types.AGENT_MINTING_FEE; // 입금액 누적 
+            roundSettleInfo.depositedAmount += fee;
         }
         {
             AgentNFT agent = AgentNFT(managedContracts[uint8(Types.ContractTags.Agent)]);
             uint256 agentId = agent.mint(msg.sender, roundId, _itemPartsIds);
-            _emitBought(msg.sender, roundId, agentId, uint256(Types.AGENT_MINTING_FEE), _itemPartsIds);
+            _emitBought(msg.sender, roundId, agentId, fee, _itemPartsIds);
         }
         {
             ItemPartsNFT itemParts = ItemPartsNFT(managedContracts[uint8(Types.ContractTags.ItemParts)]);
-            for(uint i = 0; i < _itemPartsIds.length; i++) {
+            for (uint i = 0; i < _itemPartsIds.length; i++) {
                 itemParts.burn(msg.sender, _itemPartsIds[i]);
             }
         }
@@ -522,7 +526,7 @@ contract Main is Ownable {
      * @param buyer 구매자 주소
      * @param _roundId 구매한 라운드 ID
      * @param agentId 민팅된 Agent NFT의 ID
-     * @param fee 구매 시 지불한 수수료 (STT 토큰)
+     * @param fee 구매 시 지불한 수수료 (Token 토큰)
      * @param ids 구매에 사용된 ItemParts NFT들의 ID 배열 (Head, Body, Legs, RHand, LHand 순서)
      */
     function _emitBought(
@@ -626,7 +630,7 @@ contract Main is Ownable {
             agent.burn(msg.sender, _agentId);
             RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
             RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-            uint256 amount = Types.AGENT_MINTING_FEE;
+            uint256 amount = _toTokenAmount(Types.AGENT_MINTING_FEE);
             rewardPool.withdraw(msg.sender, amount);
             roundSettleInfo.refundedAmount += amount;
             emit Refunded(msg.sender, _roundId, amount, _agentId);
@@ -690,13 +694,13 @@ contract Main is Ownable {
     }
 
     /**
-     * @notice 사용자의 STT 토큰 잔액을 조회한다.
-     * @dev STT 컨트랙트의 balanceOf 함수를 호출하여 잔액을 반환한다.
+     * @notice 사용자의 Token 토큰 잔액을 조회한다.
+     * @dev Token 컨트랙트의 balanceOf 함수를 호출하여 잔액을 반환한다.
      * @param buyer 잔액을 조회할 사용자 주소
-     * @return amount 사용자의 STT 토큰 잔액
+     * @return amount 사용자의 Token 토큰 잔액
      */
     function getCoinBalance(address buyer) public view returns(uint256 amount) {
-        (bool success, bytes memory returnData) = managedContracts[uint8(Types.ContractTags.Stt)].staticcall(
+        (bool success, bytes memory returnData) = managedContracts[uint8(Types.ContractTags.Token)].staticcall(
             abi.encodeWithSelector(
                 bytes4(keccak256("balanceOf(address)")),
                 buyer
@@ -785,7 +789,8 @@ contract Main is Ownable {
             if(winnerCount > 0) {
                 uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
                 uint256 rawPerWinner = totalPrizePayout / winnerCount;
-                uint256 prizePerWinner = (rawPerWinner / Types.SCALE) * Types.SCALE;
+                uint256 SCALE = _scaleFor3dp(); // 동적 scale (소수점 3자리 내림 유지)
+                uint256 prizePerWinner = (rawPerWinner / SCALE) * SCALE;
                 donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
                 corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
                 operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
@@ -812,42 +817,17 @@ contract Main is Ownable {
                 roundSettleInfo.operationAmount = operationAmount;
                 roundSettleInfo.stakedAmount = stakedAmount;
                 roundSettleInfo.totalPrizePayout = totalPrizePayout;
+                roundSettleInfo.carriedOutAmount = 0;
             } else {
-                // uint256 totalPrizePayout = (depositedAmount * Types.PRIZE_PERCENT) / 100;
-                // uint256 prizePerWinner = 0;
-                // donateAmount = (depositedAmount * Types.DONATE_PERCENT) / 100;
-                // corporateAmount = (depositedAmount * Types.CORPORATE_PERCENT) / 100;
-                // operationAmount = (depositedAmount * Types.OPERATION_PERCENT) / 100;
-                // stakedAmount = (depositedAmount * Types.STAKE_PERCENT) / 100;
-                // // 즉시 출금항목 (donate, corporate, stake, operation)
-                // RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-                // if(donateAmount > 0) {
-                //     rewardPool.withdraw(donateAddr, donateAmount);
-                // }
-                // if(corporateAmount > 0) {
-                //     rewardPool.withdraw(corporateAddr, corporateAmount);
-                // }
-                // if(operationAmount > 0) {
-                //     rewardPool.withdraw(operationAddr, operationAmount);
-                // }
-                // if(stakedAmount > 0) {
-                //     rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.StakePool)], stakedAmount);
-                // }
-                
-                // roundSettleInfo.prizePerWinner = prizePerWinner;
-                // roundSettleInfo.donateAmount = donateAmount;
-                // roundSettleInfo.corporateAmount = corporateAmount;
-                // roundSettleInfo.operationAmount = operationAmount;
-                // roundSettleInfo.stakedAmount = stakedAmount;
-                // roundSettleInfo.totalPrizePayout = 0;
                 donateAmount = 0;
                 corporateAmount = 0;
                 operationAmount = 0;
                 stakedAmount = 0;
+                carryAmount = depositedAmount;
+                roundSettleInfo.carriedOutAmount = depositedAmount;
                 // 상금은 다음라운드로 즉시 이월된다. (묻고 따블로가!)
                 RoundSettleManageInfo storage nextRoundSettleInfo = roundSettleManageInfo[_roundId+1];
                 nextRoundSettleInfo.depositedAmount = depositedAmount;
-                carryAmount = depositedAmount;
             }
         }
     }
@@ -871,7 +851,8 @@ contract Main is Ownable {
             uint256 operationAmount = roundSettleInfo.operationAmount;
             uint256 stakedAmount = roundSettleInfo.stakedAmount;
             uint256 refundedAmount = roundSettleInfo.refundedAmount;
-            uint256 spentAmount = claimedAmount + donateAmount + corporateAmount + operationAmount + stakedAmount + refundedAmount;
+            uint256 carryOutAmount = roundSettleInfo.carriedOutAmount;
+            uint256 spentAmount = claimedAmount + donateAmount + corporateAmount + operationAmount + stakedAmount + refundedAmount + carryOutAmount;
             if(depositedAmount < spentAmount) {
                 revert FatalAmountDiscrepancy(
                     _roundId,
@@ -883,12 +864,40 @@ contract Main is Ownable {
                     stakedAmount
                 );
             }
-            uint256 carryingOutAmount = depositedAmount - spentAmount;
-            if(carryingOutAmount > 0) {
+            uint256 reservedAmount = depositedAmount - spentAmount;
+            roundSettleInfo.reservedAmount = reservedAmount;
+            if(reservedAmount > 0) {
                 RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.Reserv)], carryingOutAmount);
+                rewardPool.withdraw(managedContracts[uint8(Types.ContractTags.Reserv)], reservedAmount);
             }
         }
+    }
+
+    /**
+     * @notice 18dec 기준 금액을 실제 토큰단위 금액으로 변환
+     * @param amount18 18dec 기준 금액
+     * @return 실제 토큰단위 금액
+     */
+    function _toTokenAmount(uint256 amount18) internal view returns (uint256) {
+        uint8 d = IERC20Metadata(managedContracts[uint8(Types.ContractTags.Token)]).decimals();
+        if(d == 18) {
+            return amount18;
+        }
+        if(d < 18) {
+            return amount18 / (10 ** (18 - d));
+        }
+        return amount18 * (10 ** (d - 18));
+    }
+
+    /**
+     * @notice “소수점 3자리까지 내림”을 유지하기 위한 동적 스케일
+     * @return 토큰 decimal에 맞춘 소수점 3자리
+     * @dev decimals < 3 인 토큰은 미대응(요구사항상 USDT=6이므로 안전)
+     */
+    function _scaleFor3dp() internal view returns (uint256) {
+        uint8 d = IERC20Metadata(managedContracts[uint8(Types.ContractTags.Token)]).decimals();
+        require(d >= 3, "token decimals < 3");
+        return 10 ** (d - 3);
     }
 }
 

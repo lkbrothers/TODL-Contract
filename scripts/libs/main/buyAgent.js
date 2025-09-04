@@ -3,8 +3,8 @@
  * @notice Main 컨트랙트 buyAgent 관련 Library
  * @author hlibbc
  */
-const { Contract, JsonRpcProvider, Wallet, keccak256, toUtf8Bytes, getBigInt, getAddress, AbiCoder, ethers } = require("ethers");
-require('dotenv').config();
+const { Contract, JsonRpcProvider, Wallet, ethers } = require("ethers");
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 /**
  * @notice Provider 및 Contract 초기화
@@ -54,19 +54,34 @@ async function getRoundStatus(main, roundId) {
 }
 
 /**
- * @notice 사용자의 STT 토큰 잔액을 반환한다.
+ * @notice 사용자의 Token 토큰 잔액을 반환한다.
  * @param {*} main Main 컨트랙트 주소
  * @param {*} walletAddress 확인할 지갑 주소
- * @returns STT 토큰 잔액
+ * @returns Token 토큰 잔액
  */
 async function getCoinBalance(main, walletAddress) {
     try {
         const balance = await main.getCoinBalance(walletAddress);
         return balance;
     } catch (error) {
-        throw new Error(`STT 잔액 확인 실패: ${error.message}`);
+        throw new Error(`Token 잔액 확인 실패: ${error.message}`);
     }
 }
+
+/**
+ * @notice 수수료 토큰 decimals 조회 (Types.ContractTags.Token = 7)
+ * @param {*} main Main 컨트랙트 주소
+ * @param {*} provider Provider 객체
+ * @returns 토큰 decimal 반환
+ */
+async function getTokenDecimals(main, provider) {
+    const tokenAddress = await main.managedContracts(7);
+    const erc20MinimalAbi = ["function decimals() view returns (uint8)"];
+    const token = new Contract(tokenAddress, erc20MinimalAbi, provider);
+    const d = await token.decimals();
+    return Number(d);
+}
+
 
 /**
  * @notice ItemParts NFT의 소유권을 확인한다.
@@ -109,26 +124,32 @@ async function checkItemPartsOwnership(itemPartsAddress, walletAddress, itemPart
 }
 
 /**
- * @notice STT 토큰의 permit 서명을 생성한다.
+ * @notice Token 토큰의 permit 서명을 생성한다.
  * @dev EIP-2612 표준을 따른다.
- * @param {*} sttAddress STT 토큰 컨트랙트 주소
+ * @param {*} tokenAddress Token 토큰 컨트랙트 주소
  * @param {*} wallet 서명할 지갑
  * @param {*} deadline 서명 만료 시간
  * @param {*} amount 허용할 토큰 양
  * @param {*} main Main 컨트랙트 주소
  * @returns permit 서명
  */
-async function createPermitSignature(sttAddress, wallet, deadline, amount, main) {
+async function createPermitSignature(tokenAddress, wallet, deadline, amount, main) {
     try {
-        const abi = require("../../../artifacts/contracts/SttPermit.sol/SttPermit.json").abi;
-        const stt = new Contract(sttAddress, abi, wallet);
+        let abiPath;
+        if(process.env.USE_STABLE_COIN == '1') {
+            abiPath = "../../../artifacts/contracts/StableCoin.sol/StableCoin.json";
+        } else {
+            abiPath = "../../../artifacts/contracts/SttPermit.sol/SttPermit.json";
+        }
+        const abi = require(abiPath).abi;
+        const token = new Contract(tokenAddress, abi, wallet);
         
-        const nonce = await stt.nonces(wallet.address);
+        const nonce = await token.nonces(wallet.address);
         const domain = {
-            name: await stt.name(),
+            name: await token.name(),
             version: '1',
             chainId: await wallet.provider.getNetwork().then(net => net.chainId),
-            verifyingContract: sttAddress
+            verifyingContract: tokenAddress
         };
         
         const types = {
@@ -218,65 +239,55 @@ async function executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig) 
             gasLimit: 1500000
         });
         const receipt = await buyAgentTx.wait();
-        
-        // Gas 사용량 출력
+
+        // Gas 사용량 출력 (기존 유지)
         console.log(`⛽ Gas 사용량: ${receipt.gasUsed.toString()} / ${buyAgentTx.gasLimit.toString()}`);
         console.log(`💰 Gas 비용: ${ethers.formatEther(receipt.gasUsed * receipt.gasPrice)} ETH`);
         
-        // Agent NFT Minted 이벤트 파싱
         let mintedAgent = null;
         for (const log of receipt.logs) {
+            // 해당 트랜잭션 로그 중 Main 컨트랙트에서 발생한 것만 시도
+            if (log.address?.toLowerCase?.() !== main.target.toLowerCase()) {
+                continue;
+            }
             try {
-                // Agent NFT Minted 이벤트 시그니처:
-                const eventSignature = "Minted(uint256,address,uint256,uint256,uint256,uint256,uint256)";
-                const eventTopic = keccak256(toUtf8Bytes(eventSignature));
-                
-                if (log.topics[0] === eventTopic) {
-                    // 이벤트 데이터 파싱
-                    const tokenId = getBigInt(log.topics[1]); // indexed parameter
-                    
-                    // 32바이트 패딩된 주소에서 하위 20바이트 추출
-                    const paddedAddress = log.topics[2];
-                    const owner = "0x" + paddedAddress.slice(-40); // 하위 20바이트 (40자)
-                    
-                    // data 필드에서 itemPartsIds 파싱 (5개의 uint256)
-                    const abiCoder = new AbiCoder();
-                    const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'uint256', 'uint256'], log.data);
-                    
-                    // Agent type 확인
+                const parsed = main.interface.parseLog(log);
+                if (parsed?.name === "Bought") {
+                    const a = parsed.args;
+
+                    // (옵션) Agent type 조회 유지
                     let agentType = null;
                     try {
                         const agentAddress = await getAgentAddress(main);
-                        agentType = await getAgentType(agentAddress, tokenId, wallet.provider);
+                        agentType = await getAgentType(agentAddress, a.agentId, wallet.provider);
                     } catch (error) {
                         console.log("⚠️ Agent type 확인 실패:", error.message);
                     }
-                    
+
                     mintedAgent = {
-                        tokenId: tokenId.toString(),
-                        owner: owner,
+                        tokenId: a.agentId.toString(),
+                        owner: a.buyer,
                         agentType: agentType ? agentType.toString() : null,
                         itemPartsIds: [
-                            decodedData[0].toString(),
-                            decodedData[1].toString(),
-                            decodedData[2].toString(),
-                            decodedData[3].toString(),
-                            decodedData[4].toString()
+                            a.burnedParts0.toString(),
+                            a.burnedParts1.toString(),
+                            a.burnedParts2.toString(),
+                            a.burnedParts3.toString(),
+                            a.burnedParts4.toString()
                         ]
                     };
-                    break; // 첫 번째 Minted 이벤트만 처리
+                    break; // 첫 번째 Bought 이벤트만 사용
                 }
             } catch (error) {
-                // 이벤트 파싱 실패 시 무시하고 계속 진행
-                console.log("⚠️ Agent NFT 이벤트 파싱 실패:", error.message);
+                // 다른 이벤트/미매칭은 무시하고 계속
             }
         }
-        
         return { transaction: buyAgentTx, receipt, mintedAgent };
     } catch (error) {
         throw new Error(`buyAgent 실행 실패: ${error.message}`);
     }
 }
+
 
 // 메인 buyAgent 함수 (순수 함수)
 /**
@@ -321,11 +332,13 @@ async function buyAgent(mainAddress, itemPartsIds, customProvider = null, custom
             throw new Error("❌ 현재 라운드상태가 \"Proceeding\"이 아닙니다.");
         }
         
-        // 5. 사용자 STT 잔액 확인
+        // 5. 사용자 토큰 잔액 확인 (decimals 반영)
+        const decimals = await getTokenDecimals(main, provider);
         const coinBalance = await getCoinBalance(main, wallet.address);
-        const requiredAmount = ethers.parseEther("1"); // 1 STT
-        if(coinBalance < requiredAmount) {
-            throw new Error(`❌ STT 잔액이 부족합니다. 필요: 1 STT, 보유: ${ethers.formatEther(coinBalance)} STT`);
+        const requiredAmount = ethers.parseUnits("1", decimals); // 6/18 자동 호환
+        if (coinBalance < requiredAmount) {
+            const have = ethers.formatUnits(coinBalance, decimals);
+            throw new Error(`❌ 잔액이 부족합니다. 필요: 1, 보유: ${have}`);
         }
         
         // 6. ItemParts 소유권 확인
@@ -339,11 +352,12 @@ async function buyAgent(mainAddress, itemPartsIds, customProvider = null, custom
             throw new Error(`❌ 소유하지 않은 ItemParts가 있습니다. Token IDs: ${nonOwnedIds}`);
         }
         
-        // 7. STT Permit 서명 생성
-        const deadline = Math.floor(Date.now() / 1000) + 3600; // 1시간 후 만료
-        const amount = ethers.parseEther("1"); // 1 STT
-        const sttAddress = await main.managedContracts(7); // STT는 7번 인덱스
-        const permitSig = await createPermitSignature(sttAddress, wallet, deadline, amount, main);
+        // 7. Permit 서명 생성 (decimals 반영)
+        const deadline = Math.floor(Date.now() / 1000) + 3600;
+        const amount = requiredAmount; // 위에서 만든 1 토큰(decimals 반영)
+        const tokenAddress = await main.managedContracts(7);
+        const permitSig = await createPermitSignature(tokenAddress, wallet, deadline, amount, main);
+
 
         // 8. buyAgent 실행
         const { transaction: buyAgentTx, receipt, mintedAgent } = await executeBuyAgent(main, wallet, itemPartsIds, deadline, permitSig);

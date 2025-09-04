@@ -184,6 +184,8 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
             wallet = new ethers.Wallet(privateKey, provider);
         }
 
+        console.log('wallet address: ', wallet.address)
+
         // 2. 컨트랙트 초기화
         const main = await initializeContracts(mainAddress, provider);
         
@@ -221,7 +223,7 @@ async function refund(mainAddress, roundId, agentId, customProvider = null, cust
             roundId: roundId.toString(),
             agentId: agentId.toString(),
             agentType: agentInfo.typeHash.toString(),
-            refundAmount: "1000000000000000000", // 1 STT (AGENT_MINTING_FEE)
+            refundAmount: "1000000000000000000", // 1 Token (AGENT_MINTING_FEE)
             refundTime: new Date().toISOString()
         };
 
@@ -245,7 +247,7 @@ function logResult(result) {
     console.log("  - 라운드 ID:", result.roundId);
     console.log("  - Agent ID:", result.agentId);
     console.log("  - Agent Type:", result.agentType);
-    console.log("  - 환불 금액:", result.refundAmount, "STT");
+    console.log("  - 환불 금액:", result.refundAmount, "Token");
     console.log("  - 환불 시간:", result.refundTime);
 }
 

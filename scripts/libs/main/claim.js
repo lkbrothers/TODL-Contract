@@ -278,7 +278,7 @@ function logResult(result) {
     console.log("  - 라운드 ID:", result.roundId);
     console.log("  - Agent ID:", result.agentId);
     console.log("  - Agent Type:", result.agentType);
-    console.log("  - 받을 상금:", result.prizeAmount, "STT");
+    console.log("  - 받을 상금:", result.prizeAmount, "Token");
     console.log("  - 총 당첨자 수:", result.totalWinners);
     console.log("  - 수령 시간:", result.claimTime);
 }
