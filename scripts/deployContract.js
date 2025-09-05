@@ -94,7 +94,7 @@ async function main() {
         await main.waitForDeployment();
         const mainAddr = await main.getAddress();
         console.log("✅ Main 컨트랙트 배포 완료:", mainAddr);
-        if ((await network.provider.send('eth_chainId')) == "0x6300b5ea") {
+        if ((await hre.network.provider.send('eth_chainId')) === "0x6300b5ea") {
             console.log("Verifying contract...");
             const args = [
                 [admin, carrier],
@@ -102,11 +102,30 @@ async function main() {
                 corporateAddr,
                 operationAddr
             ];
-            let mainAddr = await main.getAddress();
-            await run("verify:verify", {
-                address: mainAddr,
-                constructorArguments: args,
-            });
+
+            // 배포 직후 인덱싱 대기 (필요 시 5~20초로 조정)
+            await sleep(10000);
+
+            try {
+                await hre.run("verify:verify", {
+                    address: mainAddr,
+                    constructorArguments: args,
+                    contract: "contracts/Main.sol:Main", // 풀네임 명시(권장)
+                });
+                console.log("✅ Verified:", mainAddr);
+            } catch (e) {
+                const msg = (e?.message || e?.toString() || "").toLowerCase();
+                if (
+                    msg.includes("already verified") ||
+                    msg.includes("contractalreadyverifiederror") ||
+                    msg.includes("already been verified") ||
+                    msg.includes("full match")
+                ) {
+                    console.log("ℹ️ Already verified, skipping:", mainAddr);
+                } else {
+                    throw e; // 진짜 실패만 터뜨림
+                }
+            }
         }
         await waitIfNeeded();
 
