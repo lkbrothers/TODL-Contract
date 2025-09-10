@@ -543,6 +543,29 @@ describe("Main Contract", function () {
             await expect(main.connect(user1).claim(1, user1AgentId))
                 .to.be.revertedWith("Round is not claiming");
         });
+
+        it("30일(payoutLimitTime) 이후 당첨금 수령 시, 정상 수령되고 라운드가 Ended로 전이되어야 한다", async function () {
+            // ⬆️ Claiming 상태에서 30일 경과
+            await ethers.provider.send("evm_increaseTime", [2592000]); // 30일 = 2,592,000초
+            await ethers.provider.send("evm_mine");
+
+            // 수령 전 잔액
+            const beforeBalance = await token.balanceOf(user1.address);
+
+            // ✅ 당첨자(user1)가 자신의 Agent로 수령 (beforeEach에서 user1AgentId 설정됨)
+            await main.connect(user1).claim(1, user1AgentId);
+
+            // Agent가 소각되었는지 확인
+            expect(await agent.balanceOf(user1.address)).to.equal(0);
+
+            // 당첨금이 입금되었는지 확인 (정확 금액 산정 로직이 별도이므로 증가 여부만 체크)
+            const afterBalance = await token.balanceOf(user1.address);
+            expect(afterBalance).to.be.gt(beforeBalance);
+
+            // 라운드 상태가 Ended(5)로 전이되었는지 확인
+            expect(await main.getRoundStatus(1)).to.equal(5);
+        });
+
     });
 
     describe("환불", function () {
@@ -589,6 +612,32 @@ describe("Main Contract", function () {
             
             await expect(main.connect(user2).refund(1, agentId))
                 .to.be.revertedWith("Mismatch (Agent & round)");
+        });
+
+        it("payoutLimitTime(≈30일) 경과 후 refund 시, STT가 환불되고 라운드가 Ended로 전이되어야 한다", async function () {
+            // 4) 30 days 이동 (payoutLimitTime 이후)
+            await ethers.provider.send("evm_increaseTime", [2592000]); // 30일 = 2,592,000초
+            await ethers.provider.send("evm_mine");
+
+            // 5) 해당 agent에 대해 refund 수행
+            const agentId = 1; // 앞선 beforeEach에서 user1이 첫 번째 Agent를 민팅했다고 가정
+            const beforeBalance = await token.balanceOf(user1.address);
+
+            await main.connect(user1).refund(1, agentId);
+
+            // 6) 지갑으로 STT 환불되었는지 확인 (데시멀 반영)
+            const afterBalance = await token.balanceOf(user1.address);
+            const DECIMALS = await token.decimals();
+            const oneToken = ethers.parseUnits("1", DECIMALS);
+
+            // Agent 소각 확인
+            expect(await agent.balanceOf(user1.address)).to.equal(0);
+
+            // 정확히 1 토큰 환불 확인
+            expect(afterBalance - beforeBalance).to.equal(oneToken);
+
+            // 7) 라운드 상태가 Ended(5)로 전이되었는지 확인
+            expect(await main.getRoundStatus(1)).to.equal(5);
         });
     });
 

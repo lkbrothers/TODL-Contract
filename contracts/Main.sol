@@ -569,6 +569,15 @@ contract Main is Ownable {
         {
             RoundStatusManageInfo storage roundStatusInfo = roundStatusManageInfo[_roundId];
             require(roundStatusInfo.status == Types.RoundStatus.Claiming, "Round is not claiming");
+            {
+                agent.burn(msg.sender, _agentId);
+                RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
+                RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+                uint256 amount = roundSettleInfo.prizePerWinner;
+                rewardPool.withdraw(msg.sender, amount);
+                roundSettleInfo.claimedAmount += amount;
+                emit Claimed(msg.sender, _roundId, amount, _agentId);
+            }
             uint64 currentTime = uint64(block.timestamp);
             uint64 startedTimeEstimated = roundStatusInfo.startedAt - (roundStatusInfo.startedAt % Types.ROUND_PERIOD);
             if(currentTime - startedTimeEstimated > payoutLimitTime) {
@@ -577,15 +586,6 @@ contract Main is Ownable {
                 roundStatusInfo.status = Types.RoundStatus.Ended;
                 emit RoundEnd(_roundId);
             }
-        }
-        {
-            agent.burn(msg.sender, _agentId);
-            RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
-            RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-            uint256 amount = roundSettleInfo.prizePerWinner;
-            rewardPool.withdraw(msg.sender, amount);
-            roundSettleInfo.claimedAmount += amount;
-            emit Claimed(msg.sender, _roundId, amount, _agentId);
         }
     }
 
