@@ -619,21 +619,21 @@ contract Main is Ownable {
                 ///
             }
             require(roundStatusInfo.status == Types.RoundStatus.Refunding, "Round is not Refunding");
+            {
+                agent.burn(msg.sender, _agentId);
+                RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
+                RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
+                uint256 amount = _toTokenAmount(Types.AGENT_MINTING_FEE);
+                rewardPool.withdraw(msg.sender, amount);
+                roundSettleInfo.refundedAmount += amount;
+                emit Refunded(msg.sender, _roundId, amount, _agentId);
+            }
             if(currentTime - startedTimeEstimated > payoutLimitTime) {
                 _carryingOutProc(_roundId);
                 roundStatusInfo.endedAt = currentTime;
                 roundStatusInfo.status = Types.RoundStatus.Ended;
                 emit RoundEnd(_roundId);
             }
-        }
-        {
-            agent.burn(msg.sender, _agentId);
-            RoundSettleManageInfo storage roundSettleInfo = roundSettleManageInfo[_roundId];
-            RewardPool rewardPool = RewardPool(managedContracts[uint8(Types.ContractTags.RewardPool)]);
-            uint256 amount = _toTokenAmount(Types.AGENT_MINTING_FEE);
-            rewardPool.withdraw(msg.sender, amount);
-            roundSettleInfo.refundedAmount += amount;
-            emit Refunded(msg.sender, _roundId, amount, _agentId);
         }
     }
 
